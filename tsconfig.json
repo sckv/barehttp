@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "downlevelIteration": true,
+    "moduleResolution": "Node",
+    "module": "CommonJS",
+    "outDir": "./lib",
+    "target": "ESNext",
+    "lib": [
+      "ES2015",
+      "ES2016",
+      "ES2017",
+      "ES2018",
+      "ES2019",
+      "ES2020",
+      "ESNext"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "stripInternal": true,
+    "allowSyntheticDefaultImports": true,
+    "alwaysStrict": true,
+    "resolveJsonModule": true,
+    "noImplicitAny": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "typeRoots": ["./node_modules/@types", "@types/**/*"]
+  },
+  "include": ["src"],
+  "exclude": ["**/__tests__/**"]
+}
