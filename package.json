@@ -1,0 +1,34 @@
+{
+  "name": "bare-http",
+  "version": "0.0.1",
+  "description": "Lightweight and fast HTTP web server",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "keywords": [
+    "nodejs",
+    "web",
+    "server",
+    "lightweight",
+    "fast"
+  ],
+  "author": "Konstantin Knyazev <konstantinknyazev@outlook.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^15.0.2",
+    "typescript": "^4.2.4",
+    "uuid": "^8.3.2"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^4.22.1",
+    "@typescript-eslint/parser": "^4.22.1",
+    "eslint": "^7.26.0",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-jest": "^24.3.6",
+    "jest": "^26.6.3",
+    "semantic-release": "^17.4.2",
+    "supertest": "^6.1.3",
+    "ts-jest": "^26.5.6"
+  }
+}
