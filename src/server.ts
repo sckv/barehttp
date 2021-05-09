@@ -2,12 +2,11 @@ import EventEmitter from 'events';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { Server } from 'http';
 import { RequestFlow } from './request';
-import FastRouter from 'find-my-way';
+import Router from 'find-my-way';
 
 type Middleware = (flow: RequestFlow) => Promise<void> | void;
 type Handler = (flow: RequestFlow) => any;
 type ErrorHandler = (err: any, flow: RequestFlow) => void;
-
 type ServerParams = {
   middlewares?: Array<Middleware>;
   swaggerRoute?: string;
@@ -17,11 +16,9 @@ type ServerParams = {
   enableRequestAbort?: boolean;
   errorHandlerMiddleware?: ErrorHandler;
 };
-
 type RouteOpts = {
   disableCache?: boolean;
 };
-
 type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
 const HttpMethods = {
   get: 'GET',
@@ -32,35 +29,36 @@ const HttpMethods = {
   options: 'OPTIONS',
   head: 'HEAD',
 } as const;
+
 export class WebServer {
   #server: Server | null = null;
-  middlewares: Array<Middleware> = [];
-  routes: Set<string> = new Set();
-  router = FastRouter({ ignoreTrailingSlash: true });
-  flows: { [k: string]: RequestFlow } = {};
-  errorHandler: ErrorHandler;
+  #middlewares: Array<Middleware> = [];
+  #routes: Set<string> = new Set();
+  #router = Router({ ignoreTrailingSlash: true });
+  #flows: { [k: string]: RequestFlow } = {};
+  #errorHandler: ErrorHandler;
 
   constructor(private params?: ServerParams) {
     this.#server = createServer(this.listener.bind(this));
-    this.errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
-    params?.middlewares?.forEach((m) => this.middlewares.push(m));
+    this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
+    params?.middlewares?.forEach((m) => this.#middlewares.push(m));
     return this;
   }
 
   listener(request: IncomingMessage, response: ServerResponse) {
-    response.on('close', () => delete this.flows[flow.uuid]);
+    response.on('close', () => delete this.#flows[flow.uuid]);
     const flow = new RequestFlow(request, response);
-    this.flows[flow.uuid] = flow;
+    this.#flows[flow.uuid] = flow;
     this.applyMiddlewares(flow.uuid);
   }
 
   applyMiddlewares(flowId: string) {
-    const flow = this.flows[flowId];
+    const flow = this.#flows[flowId];
     let order = 1; // second middleware if exists
-    const maxOrder = this.middlewares.length;
+    const maxOrder = this.#middlewares.length;
 
     if (maxOrder < 0) {
-      this.router.lookup(flow._originalRequest, flow._originalResponse);
+      this.#router.lookup(flow._originalRequest, flow._originalResponse);
       return;
     }
 
@@ -73,11 +71,11 @@ export class WebServer {
           this.resolveMiddleware(order, flowId, goNext);
           order++;
         } else {
-          this.router.lookup(flow._originalRequest, flow._originalResponse);
+          this.#router.lookup(flow._originalRequest, flow._originalResponse);
         }
       })
       .on('error', (e: any) => {
-        this.errorHandler(e, flow);
+        this.#errorHandler(e, flow);
       });
 
     if (maxOrder > 0) this.resolveMiddleware(0, flowId, goNext);
@@ -85,12 +83,12 @@ export class WebServer {
 
   private resolveMiddleware(order: number, flowId: string, goNext: () => boolean) {
     try {
-      const isPromise = this.middlewares[order](this.flows[flowId]);
+      const isPromise = this.#middlewares[order](this.#flows[flowId]);
       if (isPromise instanceof Promise) {
-        isPromise.then(goNext).catch((e) => this.errorHandler(e, this.flows[flowId]));
+        isPromise.then(goNext).catch((e) => this.#errorHandler(e, this.#flows[flowId]));
       } else goNext();
     } catch (e) {
-      this.errorHandler(e, this.flows[flowId]);
+      this.#errorHandler(e, this.#flows[flowId]);
     }
   }
 
@@ -100,57 +98,57 @@ export class WebServer {
   }
 
   stop(cb?: (e?: Error) => void) {
-    Object.values(this.flows).forEach((flow) => {
+    Object.values(this.#flows).forEach((flow) => {
       if (!flow.response.headersSent) flow.status(500).send('Server terminated');
     });
     this.#server?.close(cb);
   }
 
   use(middleware: Middleware) {
-    this.middlewares.push(middleware);
+    this.#middlewares.push(middleware);
     return this;
   }
 
   // TODO: to extract to class proxy handler
   get(route: string, handler: Handler, opts?: RouteOpts) {
-    this.routes.add(this.encodeRoute(HttpMethods.get, route, opts));
+    this.#routes.add(this.encodeRoute(HttpMethods.get, route, opts));
     this.setRoute(HttpMethods.get, route, handler, opts);
     return this;
   }
   post(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.post, route));
+    this.#routes.add(this.encodeRoute(HttpMethods.post, route));
     this.setRoute(HttpMethods.post, route, handler);
     return this;
   }
   put(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.put, route));
+    this.#routes.add(this.encodeRoute(HttpMethods.put, route));
     this.setRoute(HttpMethods.put, route, handler);
     return this;
   }
   patch(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.patch, route));
+    this.#routes.add(this.encodeRoute(HttpMethods.patch, route));
     this.setRoute(HttpMethods.patch, route, handler);
     return this;
   }
   delete(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.delete, route));
+    this.#routes.add(this.encodeRoute(HttpMethods.delete, route));
     this.setRoute(HttpMethods.delete, route, handler);
     return this;
   }
   options(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.options, route));
+    this.#routes.add(this.encodeRoute(HttpMethods.options, route));
     this.setRoute(HttpMethods.options, route, handler);
     return this;
   }
   head(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.head, route));
+    this.#routes.add(this.encodeRoute(HttpMethods.head, route));
     this.setRoute(HttpMethods.options, route, handler);
     return this;
   }
 
   private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
-    this.router.on(method, route, (req, _, params) => {
-      const flow = this.flows[(req as any).id];
+    this.#router.on(method, route, (req, _, params) => {
+      const flow = this.#flows[(req as any).id];
       if (opts?.disableCache) flow.disableCache();
       flow.setParams(params);
       handler(flow);
@@ -162,7 +160,7 @@ export class WebServer {
   }
 
   getRoutes() {
-    return [...this.routes.keys()];
+    return [...this.#routes.keys()];
   }
 
   private basicErrorHandler(e: any, flow: RequestFlow) {
