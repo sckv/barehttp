@@ -2,7 +2,9 @@ import { WebServer } from './server';
 
 const server = new WebServer();
 
-server.get('/route', (flow) => flow.json('JUST_RESPONSE'), { disableCache: true });
+server.get('/route', (flow) => {
+  flow.json('JUST_RESPONSE');
+});
 
 server
   .use((flow) => {
