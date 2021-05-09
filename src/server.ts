@@ -4,8 +4,8 @@ import { Server } from 'http';
 import { RequestFlow } from './request';
 import FastRouter from 'find-my-way';
 
-type Middleware = (flow: RequestFlow, next: (e: any) => void) => void;
-type Handler = (flow: RequestFlow) => void;
+type Middleware = (flow: RequestFlow) => Promise<void> | void;
+type Handler = (flow: RequestFlow) => any;
 type ErrorHandler = (err: any, flow: RequestFlow) => void;
 
 type ServerParams = {
@@ -16,6 +16,10 @@ type ServerParams = {
   disableEtag?: boolean;
   enableRequestAbort?: boolean;
   errorHandlerMiddleware?: ErrorHandler;
+};
+
+type RouteOpts = {
+  disableCache?: boolean;
 };
 
 type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
@@ -46,37 +50,48 @@ export class WebServer {
   listener(request: IncomingMessage, response: ServerResponse) {
     response.on('close', () => delete this.flows[flow.uuid]);
     const flow = new RequestFlow(request, response);
-    // console.log({ flow });
     this.flows[flow.uuid] = flow;
     this.applyMiddlewares(flow.uuid);
   }
 
   applyMiddlewares(flowId: string) {
     const flow = this.flows[flowId];
-    let order = 0;
-    const maxOrder = this.middlewares.length - 1;
+    let order = 1; // second middleware if exists
+    const maxOrder = this.middlewares.length;
+
     if (maxOrder < 0) {
-      this.router.lookup(flow.originalRequest, flow.originalResponse);
+      this.router.lookup(flow._originalRequest, flow._originalResponse);
       return;
     }
 
     const middlewaresHandler = new EventEmitter({ captureRejections: true });
-    const nextFn = (e?: any) => middlewaresHandler.emit('next', e);
+    const goNext = () => middlewaresHandler.emit('next');
 
     middlewaresHandler
-      .on('next', (e?: any) => {
-        if (e) this.errorHandler(e, flow);
-
-        if (order <= maxOrder) {
-          this.middlewares[order](flow, nextFn);
+      .on('next', () => {
+        if (order <= maxOrder - 1) {
+          this.resolveMiddleware(order, flowId, goNext);
           order++;
         } else {
-          this.router.lookup(flow.originalRequest, flow.originalResponse);
+          this.router.lookup(flow._originalRequest, flow._originalResponse);
         }
       })
       .on('error', (e: any) => {
         this.errorHandler(e, flow);
       });
+
+    if (maxOrder > 0) this.resolveMiddleware(0, flowId, goNext);
+  }
+
+  private resolveMiddleware(order: number, flowId: string, goNext: () => boolean) {
+    try {
+      const isPromise = this.middlewares[order](this.flows[flowId]);
+      if (isPromise instanceof Promise) {
+        isPromise.then(goNext).catch((e) => this.errorHandler(e, this.flows[flowId]));
+      } else goNext();
+    } catch (e) {
+      this.errorHandler(e, this.flows[flowId]);
+    }
   }
 
   start(cb?: (address: string) => void) {
@@ -86,7 +101,7 @@ export class WebServer {
 
   stop(cb?: (e?: Error) => void) {
     Object.values(this.flows).forEach((flow) => {
-      if (!flow.response.headersSent) flow.setStatus(500).send('Server terminated');
+      if (!flow.response.headersSent) flow.status(500).send('Server terminated');
     });
     this.#server?.close(cb);
   }
@@ -97,9 +112,9 @@ export class WebServer {
   }
 
   // TODO: to extract to class proxy handler
-  get(route: string, handler: Handler) {
-    this.routes.add(this.encodeRoute(HttpMethods.get, route));
-    this.setRoute(HttpMethods.get, route, handler);
+  get(route: string, handler: Handler, opts?: RouteOpts) {
+    this.routes.add(this.encodeRoute(HttpMethods.get, route, opts));
+    this.setRoute(HttpMethods.get, route, handler, opts);
     return this;
   }
   post(route: string, handler: Handler) {
@@ -133,15 +148,16 @@ export class WebServer {
     return this;
   }
 
-  private setRoute(method: Methods, route: string, handler: Handler) {
+  private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
     this.router.on(method, route, (req, _, params) => {
       const flow = this.flows[(req as any).id];
+      if (opts?.disableCache) flow.disableCache();
       flow.setParams(params);
       handler(flow);
     });
   }
 
-  encodeRoute(method: string, route: string) {
+  encodeRoute(method: string, route: string, opts?: RouteOpts) {
     return `${method} ${route}`;
   }
 
@@ -149,5 +165,7 @@ export class WebServer {
     return [...this.routes.keys()];
   }
 
-  private basicErrorHandler(e: any, flow: RequestFlow) {}
+  private basicErrorHandler(e: any, flow: RequestFlow) {
+    flow.sendStatus(500);
+  }
 }
