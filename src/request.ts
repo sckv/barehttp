@@ -86,12 +86,18 @@ export class RequestFlow {
   request: WebRequest;
   response: WebResponse;
   uuid: string;
+  params: { [k: string]: string | undefined } = {};
   private status: number | undefined;
 
   constructor(public originalRequest: IncomingMessage, public originalResponse: ServerResponse) {
     this.request = pickFrom(originalRequest, ...requestKeys);
     this.response = pickFrom(originalResponse, ...responseKeys);
     this.uuid = (originalRequest.headers['x-request-id'] as string) || uuidv4();
+    (originalRequest as any).id = this.uuid;
+  }
+
+  setParams(params: { [k: string]: string | undefined }) {
+    this.params = params;
   }
 
   setHeader(header: string, value: string) {
@@ -108,11 +114,12 @@ export class RequestFlow {
 
   setStatus(status: typeof StatusCodes[keyof typeof StatusCodes]) {
     this.status = status;
+    return this;
   }
 
   sendStatus(status: typeof StatusCodes[keyof typeof StatusCodes]) {
     this.setStatus(status);
-    this.send(StatusPhrases);
+    this.send(StatusPhrases.ACCEPTED);
   }
 
   send(chunk: any) {
