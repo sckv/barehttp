@@ -1,6 +1,6 @@
 module.exports = {
   trailingComma: 'all',
   singleQuote: true,
-  printWidth: 80,
+  printWidth: 100,
   overrides: [{ files: '*.ts', parser: 'typescript' }],
 };
