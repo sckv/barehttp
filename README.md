@@ -4,12 +4,16 @@ A slim web server in node used for microservices, with observability, speed and 
 
 ## Features
 
-- Automatic serialization-deserialization of json
-- Automatic UUID
-- Automatic Request-Time
-- Automatic Logging in production and development
-- Automatic Routes report
-- Automatic cache handling
-- Automatic cookies creation / parsing
-- Automatic request cancellation
-- Automatic execution context (to proxy)
+Fully-featured production-ready HTTP/1.1 web server.
+
+- safe and fast serialization-deserialization of JSON
+- UUID (adopted or generated)
+- Request-Time header and log
+- promise or conventional middlewares
+- fast logging in production and development (DataDog schema for production)
+- routes usage report and endpoint
+- headers cache handling
+- cookies creation/parsing
+- request execution isolated context
+- request execution cancellation
+- streaming of chunked multipart response
