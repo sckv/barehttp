@@ -145,24 +145,23 @@ export class RequestFlow {
   }
 
   json(data: any) {
+    // to generate for fast-json-stringify schema
     const jsoned = JSONStringify(data);
     this.setHeader('Content-Type', 'application/json');
     this.send(jsoned);
   }
 
-  send(chunk?: string) {
+  send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
     if (this._originalResponse.socket?.destroyed) return;
     this._originalResponse.statusMessage = statusTuples[this.statusToSend];
 
-    chunk && this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
+    // work basic headers
+    if (typeof chunk !== 'undefined' && chunk !== null)
+      this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
     if (!this.cache) this.setHeaders({ Cache: 'no-store', Expire: 0, Pragma: 'no-cache' });
-    this._originalResponse.writeHead(this.statusToSend);
 
-    if (chunk) {
-      this._originalResponse.write(chunk, 'utf-8', (e) => {
-        if (e) throw e;
-      });
-    }
-    this._originalResponse.end();
+    // perform sending
+    this._originalResponse.writeHead(this.statusToSend);
+    this._originalResponse.end(chunk);
   }
 }
