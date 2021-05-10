@@ -1,5 +1,6 @@
 'use strict';
 
+// taken from https://bl.ocks.org/coolaj86/7e5ebb9a6708d0ebfc78
 var crypto = require('crypto');
 var pool = 31 * 128; // 36 chars minus 4 dashes and 1 four
 var r = crypto.randomBytes(pool);

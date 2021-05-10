@@ -15,6 +15,10 @@ type ServerParams = {
   disableEtag?: boolean;
   enableRequestAbort?: boolean;
   errorHandlerMiddleware?: ErrorHandler;
+  /**
+   * Default 's' - seconds
+   */
+  requestTimeFormat?: 's' | 'ms';
 };
 type RouteOpts = {
   disableCache?: boolean;
@@ -37,60 +41,59 @@ export class WebServer {
   #router = Router({ ignoreTrailingSlash: true });
   #flows: { [k: string]: RequestFlow } = {};
   #errorHandler: ErrorHandler;
-  cleanedFlows: string[] = [];
+  private generatedMiddlewares: any | (() => (flow: RequestFlow) => void);
 
   constructor(private params?: ServerParams) {
     this.#server = createServer(this.listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
-    params?.middlewares?.forEach((m) => this.#middlewares.push(m));
+    params?.middlewares?.forEach((m) => this.use(m));
     return this;
   }
 
   private listener(request: IncomingMessage, response: ServerResponse) {
-    request.on('close', () => delete this.#flows[flow.uuid]);
-    const flow = new RequestFlow(request, response);
+    const flow = new RequestFlow(request, response, {
+      requestTimeFormat: this.params?.requestTimeFormat,
+    });
+    request.on('close', () => delete this.#flows[flow.uuid]); // remove already finished flow from the memory
     this.#flows[flow.uuid] = flow;
     this.applyMiddlewares(flow.uuid);
   }
 
-  private applyMiddlewares(flowId: string) {
-    const flow = this.#flows[flowId];
-    let order = 1; // second middleware if exists
+  /**
+   * This function generates defined middlewares for the sequential execution
+   */
+  private writeMiddlewares() {
+    const lines: string[] = [];
+    let order = 0;
     const maxOrder = this.#middlewares.length;
 
-    if (maxOrder === 0) {
-      // no user middlewares defined -> go router
-      this.#router.lookup(flow._originalRequest, flow._originalResponse);
-      return;
+    lines.push('return async () => {');
+
+    if (maxOrder > 0) {
+      while (order <= maxOrder - 1) {
+        lines.push(`await this.resolveMiddleware(${order}, flow);`);
+        order++;
+      }
     }
 
-    const middlewaresHandler = new EventEmitter({ captureRejections: true });
-    const goNext = () => middlewaresHandler.emit('next');
+    lines.push('}');
 
-    middlewaresHandler
-      .on('next', () => {
-        if (order <= maxOrder - 1) {
-          this.resolveMiddleware(order, flowId, goNext);
-          order++;
-        } else {
-          this.#router.lookup(flow._originalRequest, flow._originalResponse);
-        }
-      })
-      .on('error', (e: any) => {
-        this.#errorHandler(e, flow);
-      });
+    const text = lines.join('\n');
 
-    if (maxOrder > 0) this.resolveMiddleware(0, flowId, goNext);
+    this.generatedMiddlewares = new Function('flow', text) as any;
   }
 
-  private resolveMiddleware(order: number, flowId: string, goNext: () => boolean) {
+  private async applyMiddlewares(flowId: string) {
+    const flow = this.#flows[flowId];
+    if (this.#middlewares.length) await this.generatedMiddlewares(flow)();
+    this.#router.lookup(flow._originalRequest, flow._originalResponse);
+  }
+
+  private async resolveMiddleware(order: number, flow: RequestFlow) {
     try {
-      const isPromise = this.#middlewares[order](this.#flows[flowId]);
-      if (isPromise instanceof Promise) {
-        isPromise.then(goNext).catch((e) => this.#errorHandler(e, this.#flows[flowId]));
-      } else goNext();
+      await this.#middlewares[order](flow);
     } catch (e) {
-      this.#errorHandler(e, this.#flows[flowId]);
+      this.#errorHandler(e, flow);
     }
   }
 
@@ -100,14 +103,18 @@ export class WebServer {
   }
 
   stop(cb?: (e?: Error) => void) {
-    Object.values(this.#flows).forEach((flow) => {
-      if (!flow.response.headersSent) flow.status(500).send('Server terminated');
-    });
+    for (const flow of Object.values(this.#flows)) {
+      if (!flow._originalResponse.headersSent) {
+        flow.status(500);
+        flow.send('Server terminated');
+      }
+    }
     this.#server?.close(cb);
   }
 
   use(middleware: Middleware) {
     this.#middlewares.push(middleware);
+    this.writeMiddlewares();
     return this;
   }
 
@@ -139,12 +146,27 @@ export class WebServer {
   }
 
   private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
-    this.#router.on(method, route, (req, _, params) => {
-      const flow = this.#flows[(req as any).id];
-      if (opts?.disableCache) flow.disableCache();
-      flow.setParams(params);
-      handler(flow);
-    });
+    this.#router.on(method, route, (req, _, params) =>
+      this.handleRoute(req, params, handler, opts),
+    );
+  }
+
+  private handleRoute(
+    req: IncomingMessage,
+    params: { [k: string]: string | undefined },
+    handler: Handler,
+    opts?: RouteOpts,
+  ) {
+    const flow = this.#flows[(req as any).id];
+
+    // apply possible options
+    if (opts?.disableCache) flow.disableCache();
+    flow.setParams(params);
+
+    const response = handler(flow);
+    if (response instanceof Promise) {
+      response.catch((e) => this.#errorHandler(e, flow));
+    }
   }
 
   private encodeRoute(method: string, route: string, opts?: RouteOpts) {
