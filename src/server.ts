@@ -37,6 +37,7 @@ export class WebServer {
   #router = Router({ ignoreTrailingSlash: true });
   #flows: { [k: string]: RequestFlow } = {};
   #errorHandler: ErrorHandler;
+  cleanedFlows: string[] = [];
 
   constructor(private params?: ServerParams) {
     this.#server = createServer(this.listener.bind(this));
@@ -46,7 +47,7 @@ export class WebServer {
   }
 
   private listener(request: IncomingMessage, response: ServerResponse) {
-    response.on('close', () => delete this.#flows[flow.uuid]);
+    request.on('close', () => delete this.#flows[flow.uuid]);
     const flow = new RequestFlow(request, response);
     this.#flows[flow.uuid] = flow;
     this.applyMiddlewares(flow.uuid);
@@ -57,7 +58,8 @@ export class WebServer {
     let order = 1; // second middleware if exists
     const maxOrder = this.#middlewares.length;
 
-    if (maxOrder < 0) {
+    if (maxOrder === 0) {
+      // no user middlewares defined -> go router
       this.#router.lookup(flow._originalRequest, flow._originalResponse);
       return;
     }
@@ -122,6 +124,7 @@ export class WebServer {
               return self;
             };
           }
+          return self;
         },
       },
     ) as Readonly<
