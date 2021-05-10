@@ -93,21 +93,48 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
+type FlowOpts = {
+  /**
+   * Default 's' - seconds
+   */
+  requestTimeFormat?: 's' | 'ms';
+};
+
 export class RequestFlow {
-  request: WebRequest;
-  response: WebResponse;
+  // request: WebRequest;
+  // response: WebResponse;
   uuid: string;
   params: { [k: string]: string | undefined } = {};
   private cache = true;
   private statusToSend: number = 200;
+  private startTime: [seconds: number, nanoseconds: number];
+  private countTimeFormat: 'ms' | 's' = 's';
+  private headers: { [header: string]: string | number } = {};
 
-  constructor(public _originalRequest: IncomingMessage, public _originalResponse: ServerResponse) {
-    this.request = pickFrom(_originalRequest, ...requestKeys);
-    this.response = pickFrom(_originalResponse, ...responseKeys);
+  constructor(
+    public _originalRequest: IncomingMessage,
+    public _originalResponse: ServerResponse,
+    opts?: FlowOpts,
+  ) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || uuidv4();
     (_originalRequest as any).id = this.uuid;
-    this.setHeader('Content-Type', 'text/plain');
-    this.setHeader('X-Request-Id', this.uuid);
+    this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.uuid });
+    this.startTime = process.hrtime();
+
+    if (opts?.requestTimeFormat) this.countTimeFormat = opts.requestTimeFormat;
+  }
+
+  private setRequestTime() {
+    var diff = process.hrtime(this.startTime);
+
+    var time =
+      diff[0] * (this.countTimeFormat === 's' ? 1 : 1e3) +
+      diff[1] * (this.countTimeFormat === 's' ? 1e-9 : 1e-6);
+
+    this.setHeaders({
+      'X-Response-Time': time,
+      'X-Response-Time-Mode': this.countTimeFormat === 's' ? 'seconds' : 'milliseconds',
+    });
   }
 
   disableCache() {
@@ -119,20 +146,17 @@ export class RequestFlow {
   }
 
   setHeader(header: string, value: string | number) {
-    this._originalResponse.setHeader(header, value);
-    return this;
+    this.headers[header] = value;
   }
 
   setHeaders(headers: { [header: string]: string | number }) {
-    Object.entries(headers).forEach(([header, value]) => {
-      this._originalResponse.setHeader(header, value);
-    });
-    return this;
+    for (const header of Object.keys(headers)) {
+      this.headers[header] = headers[header];
+    }
   }
 
   status(status: typeof StatusCodes[keyof typeof StatusCodes]) {
     this.statusToSend = status;
-    return this;
   }
 
   sendStatus(status: typeof StatusCodes[keyof typeof StatusCodes]) {
@@ -145,7 +169,7 @@ export class RequestFlow {
   }
 
   json(data: any) {
-    // to generate for fast-json-stringify schema
+    // to generate with fast-json-stringify schema issue #1
     const jsoned = JSONStringify(data);
     this.setHeader('Content-Type', 'application/json');
     this.send(jsoned);
@@ -153,15 +177,21 @@ export class RequestFlow {
 
   send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
     if (this._originalResponse.socket?.destroyed) return;
-    this._originalResponse.statusMessage = statusTuples[this.statusToSend];
 
     // work basic headers
     if (typeof chunk !== 'undefined' && chunk !== null)
       this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
+
     if (!this.cache) this.setHeaders({ Cache: 'no-store', Expire: 0, Pragma: 'no-cache' });
 
+    this.setRequestTime();
+
     // perform sending
-    this._originalResponse.writeHead(this.statusToSend);
+    this._originalResponse.writeHead(
+      this.statusToSend,
+      statusTuples[this.statusToSend],
+      this.headers,
+    );
     this._originalResponse.end(chunk);
   }
 }
