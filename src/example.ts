@@ -2,7 +2,7 @@ import { WebServer } from './server';
 
 const server = new WebServer();
 
-server.get('/route', (flow) => {
+server.route.get('/route', (flow) => {
   flow.json('JUST_RESPONSE');
 });
 
@@ -15,8 +15,6 @@ server
   .use(async (flow) => {
     // console.log('middleware triggered');
     // console.log(flow.uuid);
-    //  Promise.resolve();
-    // await next();
     return;
   });
 

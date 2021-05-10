@@ -45,14 +45,14 @@ export class WebServer {
     return this;
   }
 
-  listener(request: IncomingMessage, response: ServerResponse) {
+  private listener(request: IncomingMessage, response: ServerResponse) {
     response.on('close', () => delete this.#flows[flow.uuid]);
     const flow = new RequestFlow(request, response);
     this.#flows[flow.uuid] = flow;
     this.applyMiddlewares(flow.uuid);
   }
 
-  applyMiddlewares(flowId: string) {
+  private applyMiddlewares(flowId: string) {
     const flow = this.#flows[flowId];
     let order = 1; // second middleware if exists
     const maxOrder = this.#middlewares.length;
@@ -109,41 +109,30 @@ export class WebServer {
     return this;
   }
 
-  // TODO: to extract to class proxy handler
-  get(route: string, handler: Handler, opts?: RouteOpts) {
-    this.#routes.add(this.encodeRoute(HttpMethods.get, route, opts));
-    this.setRoute(HttpMethods.get, route, handler, opts);
-    return this;
-  }
-  post(route: string, handler: Handler) {
-    this.#routes.add(this.encodeRoute(HttpMethods.post, route));
-    this.setRoute(HttpMethods.post, route, handler);
-    return this;
-  }
-  put(route: string, handler: Handler) {
-    this.#routes.add(this.encodeRoute(HttpMethods.put, route));
-    this.setRoute(HttpMethods.put, route, handler);
-    return this;
-  }
-  patch(route: string, handler: Handler) {
-    this.#routes.add(this.encodeRoute(HttpMethods.patch, route));
-    this.setRoute(HttpMethods.patch, route, handler);
-    return this;
-  }
-  delete(route: string, handler: Handler) {
-    this.#routes.add(this.encodeRoute(HttpMethods.delete, route));
-    this.setRoute(HttpMethods.delete, route, handler);
-    return this;
-  }
-  options(route: string, handler: Handler) {
-    this.#routes.add(this.encodeRoute(HttpMethods.options, route));
-    this.setRoute(HttpMethods.options, route, handler);
-    return this;
-  }
-  head(route: string, handler: Handler) {
-    this.#routes.add(this.encodeRoute(HttpMethods.head, route));
-    this.setRoute(HttpMethods.options, route, handler);
-    return this;
+  get route() {
+    const self = this;
+    return new Proxy(
+      {},
+      {
+        get(_, key) {
+          if (Object.keys(HttpMethods).includes(key as string)) {
+            return function (...args: any[]) {
+              self.#routes.add(self.encodeRoute(HttpMethods.get, args[0], args[2]));
+              self.setRoute(HttpMethods.get, args[0], args[1], args[2]);
+              return self;
+            };
+          }
+        },
+      },
+    ) as Readonly<
+      {
+        [K in keyof typeof HttpMethods]: <R extends `/${string}`>(
+          route: R,
+          handler: Handler,
+          opts?: RouteOpts,
+        ) => WebServer;
+      }
+    >;
   }
 
   private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
@@ -155,7 +144,7 @@ export class WebServer {
     });
   }
 
-  encodeRoute(method: string, route: string, opts?: RouteOpts) {
+  private encodeRoute(method: string, route: string, opts?: RouteOpts) {
     return `${method} ${route}`;
   }
 
