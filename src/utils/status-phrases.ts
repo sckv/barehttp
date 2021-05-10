@@ -1,3 +1,4 @@
+// taken from https://github.com/prettymuchbryce/http-status-codes/
 export const StatusPhrases = {
   /**
    * Official Documentation @ https://tools.ietf.org/html/rfc7231#section-6.3.3
