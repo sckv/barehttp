@@ -1,8 +1,8 @@
-import EventEmitter from 'events';
-import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { Server } from 'http';
-import { RequestFlow } from './request';
 import Router from 'find-my-way';
+
+import { RequestFlow } from './request';
+
+import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 
 type Middleware = (flow: RequestFlow) => Promise<void> | void;
 type Handler = (flow: RequestFlow) => any;
@@ -39,11 +39,12 @@ export class WebServer {
   #middlewares: Array<Middleware> = [];
   #routes: Set<string> = new Set();
   #router = Router({ ignoreTrailingSlash: true });
-  #flows: { [k: string]: RequestFlow } = {};
+  #flows: Map<string, RequestFlow> = new Map();
   #errorHandler: ErrorHandler;
+
   private generatedMiddlewares: any | (() => (flow: RequestFlow) => void);
 
-  constructor(private params?: ServerParams) {
+  constructor(private params: ServerParams = {}) {
     this.#server = createServer(this.listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
     params?.middlewares?.forEach((m) => this.use(m));
@@ -51,11 +52,15 @@ export class WebServer {
   }
 
   private listener(request: IncomingMessage, response: ServerResponse) {
-    const flow = new RequestFlow(request, response, {
-      requestTimeFormat: this.params?.requestTimeFormat,
-    });
-    request.on('close', () => delete this.#flows[flow.uuid]); // remove already finished flow from the memory
-    this.#flows[flow.uuid] = flow;
+    const { requestTimeFormat } = this.params;
+
+    const flow = new RequestFlow(request, response);
+
+    if (requestTimeFormat) flow.setTimeFormat(requestTimeFormat);
+
+    request.on('close', () => this.#flows.delete(flow.uuid)); // remove already finished flow from the memory
+
+    this.#flows.set(flow.uuid, flow);
     this.applyMiddlewares(flow.uuid);
   }
 
@@ -84,14 +89,15 @@ export class WebServer {
   }
 
   private async applyMiddlewares(flowId: string) {
-    const flow = this.#flows[flowId];
+    const flow = this.#flows.get(flowId)!;
     if (this.#middlewares.length) await this.generatedMiddlewares(flow)();
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
   private async resolveMiddleware(order: number, flow: RequestFlow) {
     try {
-      await this.#middlewares[order](flow);
+      const response = this.#middlewares[order](flow);
+      if (response instanceof Promise) await response;
     } catch (e) {
       this.#errorHandler(e, flow);
     }
@@ -119,6 +125,7 @@ export class WebServer {
   }
 
   get route() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return new Proxy(
       {},
@@ -157,11 +164,11 @@ export class WebServer {
     handler: Handler,
     opts?: RouteOpts,
   ) {
-    const flow = this.#flows[(req as any).id];
+    const flow = this.#flows.get((req as any).id)!;
 
     // apply possible options
     if (opts?.disableCache) flow.disableCache();
-    flow.setParams(params);
+    if (params) flow.setParams(params);
 
     const response = handler(flow);
     if (response instanceof Promise) {
