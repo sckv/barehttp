@@ -1,10 +1,11 @@
-import { logger } from '../logger';
+import { logMe } from '../logger';
 import { WebServer } from '../server';
 
 const server = new WebServer();
 
 server.route.get('/route', async (flow) => {
-  // logger.info('some log huehuehue');
+  logMe.info('message');
+  // logger.info({ message: 'some log huehuehue', additional: 'some log' });
   // sendToWorker({ level: 'info', message: 'huehue' });
   flow.send('JUST_RESPONSE');
 });

@@ -18,6 +18,7 @@
   "dependencies": {
     "@types/node": "^15.0.2",
     "@types/pino": "^6.3.8",
+    "callsites": "^3.1.0",
     "find-my-way": "^4.1.0",
     "hyperid": "^2.1.0",
     "pino": "^6.11.3",
