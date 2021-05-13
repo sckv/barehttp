@@ -153,14 +153,14 @@ export class WebServer {
   }
 
   private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
-    this.#router.on(method, route, (req, _, params) =>
-      this.handleRoute(req, params, handler, opts),
+    this.#router.on(method, route, (req, _, routeParams) =>
+      this.handleRoute(req, routeParams, handler, opts),
     );
   }
 
   private handleRoute(
     req: IncomingMessage,
-    params: { [k: string]: string | undefined },
+    routeParams: { [k: string]: string | undefined },
     handler: Handler,
     opts?: RouteOpts,
   ) {
@@ -168,7 +168,7 @@ export class WebServer {
 
     // apply possible options
     if (opts?.disableCache) flow.disableCache();
-    if (params) flow.setParams(params);
+    if (routeParams) flow.setParams(routeParams);
 
     const response = handler(flow);
     if (response instanceof Promise) {
