@@ -1,9 +1,11 @@
 import Router from 'find-my-way';
 
 import { RequestFlow } from './request';
+import { logMe } from './logger';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
+import { Readable, Writable } from 'stream';
 
 type Middleware = (flow: RequestFlow) => Promise<void> | void;
 type Handler = (flow: RequestFlow) => any;
@@ -180,9 +182,38 @@ export class FlowServer {
     if (opts?.disableCache) flow.disableCache();
     if (routeParams) flow.setParams(routeParams);
 
-    const response = handler(flow);
-    if (response instanceof Promise) {
-      response.catch((e) => this.#errorHandler(e, flow));
+    const routeReturn = handler(flow);
+    if (routeReturn instanceof Promise) {
+      routeReturn
+        .catch((e) => this.#errorHandler(e, flow))
+        .then((routeReturn) => {
+          if (routeReturn) this.soundRouteReturn(routeReturn, flow);
+        });
+    } else {
+      if (routeReturn) this.soundRouteReturn(routeReturn, flow);
+    }
+  }
+
+  private soundRouteReturn(response: any, flow: RequestFlow) {
+    if (flow._originalResponse.headersSent) return;
+
+    switch (response.constructor) {
+      case Uint8Array:
+      case Uint16Array:
+      case Uint32Array:
+      case ArrayBuffer:
+      case Buffer:
+      case Number:
+        flow.send(response);
+        break;
+      case Writable:
+        flow.stream(response);
+        break;
+      case String:
+        flow.json(response);
+        break;
+      default:
+        logMe.warn('Unknown type to send');
     }
   }
 
