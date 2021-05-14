@@ -7,17 +7,16 @@ const previous = new Map<number, Execution>();
 
 type Context = {
   current?: Execution;
-  newContext: (type: string) => Execution;
-  enable: () => asyncHooks.AsyncHook;
   enabled: boolean;
+};
+
+const newContext = (type: string) => {
+  context.current = new Execution(type);
+  running.set(asyncHooks.executionAsyncId(), context.current);
 };
 
 const context: Context = {
   enabled: false,
-  newContext: (type: string) => {
-    context.current = new Execution(type);
-    running.set(asyncHooks.executionAsyncId(), context.current);
-  },
 } as any;
 
 function init(asyncId: number, _type: string, triggerAsyncId: number) {
@@ -53,9 +52,9 @@ const hook = asyncHooks.createHook({
   destroy,
 });
 
-context.enable = () => {
+const enableContext = () => {
   context.enabled = true;
-  return hook.enable();
+  hook.enable();
 };
 
-export { context };
+export { context, newContext, enableContext };
