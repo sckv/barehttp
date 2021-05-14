@@ -2,6 +2,7 @@ import Router from 'find-my-way';
 
 import { RequestFlow } from './request';
 
+import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 
 type Middleware = (flow: RequestFlow) => Promise<void> | void;
@@ -34,7 +35,7 @@ const HttpMethods = {
   head: 'HEAD',
 } as const;
 
-export class WebServer {
+export class FlowServer {
   #server: Server | null = null;
   #middlewares: Array<Middleware> = [];
   #routes: Set<string> = new Set();
@@ -90,6 +91,11 @@ export class WebServer {
 
   private async applyMiddlewares(flowId: string) {
     const flow = this.#flows.get(flowId)!;
+
+    // to test in cloud provider
+    const remoteClient = await dns.promises.reverse(flow.remoteIp!);
+    flow.setRemoteClient(remoteClient[0]);
+
     if (this.#middlewares.length) await this.generatedMiddlewares(flow)();
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
@@ -105,7 +111,11 @@ export class WebServer {
 
   start(cb?: (address: string) => void) {
     const port = this.params?.serverPort || process.env.PORT || 3000;
-    this.#server?.listen(port, () => (cb ? cb(`http://localhost:${port}`) : void 0));
+
+    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
+    this.#server?.listen(+port, '0.0.0.0', undefined, () =>
+      cb ? cb(`http://localhost:${port}`) : void 0,
+    );
   }
 
   stop(cb?: (e?: Error) => void) {
@@ -147,7 +157,7 @@ export class WebServer {
           route: R,
           handler: Handler,
           opts?: RouteOpts,
-        ) => WebServer;
+        ) => FlowServer;
       }
     >;
   }

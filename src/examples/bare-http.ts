@@ -1,30 +1,22 @@
 import { logMe } from '../logger';
-import { WebServer } from '../server';
+import { FlowServer } from '../server';
 
-const server = new WebServer();
+const server = new FlowServer();
 
-server.route.get('/route', async (flow) => {
+server.route.get('/route', async function routeV1(flow) {
   logMe.info('message');
-  // logger.info({ message: 'some log huehuehue', additional: 'some log' });
-  // sendToWorker({ level: 'info', message: 'huehue' });
   flow.send('JUST_RESPONSE');
 });
 
-server;
-// .use((flow) => {
-//   // console.log('middleware 1 triggered');
-//   // flow.setHeader('middleware-1', 'gone');
-//   // throw 'ERROR';
-//   // return;
-// })
-// .use(async (flow) => {
-//   // flow.setHeader('middleware-2', 'gone');
-//   // console.log('middleware 2 triggered');
-//   // console.log(flow.uuid);
-//   return;
-// });
+server
+  .use((flow) => {
+    return;
+  })
+  .use(async (flow) => {
+    return;
+  });
 
 console.log(server.getRoutes());
 server.start((address) => {
-  console.log(`Server started at ${address}`);
+  console.log(`FlowServer started at ${address}`);
 });
