@@ -3,9 +3,9 @@ import { FlowServer } from '../server';
 
 const server = new FlowServer();
 
-server.route.get('/route', async function routeV1(flow) {
+server.route.get('/route', async function routeV1() {
   logMe.info('message');
-  flow.send('JUST_RESPONSE');
+  return Buffer.from('asdfasdfasdfasdfasdfsa');
 });
 
 server
