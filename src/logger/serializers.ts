@@ -1,12 +1,13 @@
 import callsites from 'callsites';
 
 import pJson from '../../package.json';
+import { context } from '../context';
 
 import util from 'util';
 import type { IncomingMessage, ServerResponse } from 'http';
 
-export function parseError(e: any, location: string, attrs: any) {
-  const toSend = { error: { ...e }, location, ...attrs };
+export function parseError(e: any, meta: any) {
+  const toSend = { error: { ...e }, ...meta };
   toSend.message = e.message;
   if (e.stack) toSend.error.stack = e.stack;
   toSend.error.kind = e.constructor.name;
@@ -23,16 +24,19 @@ export function serializeLog(...args) {
   const site = callsites()[2];
   const location = `${site.getFileName()}:${site.getLineNumber()}:${site.getColumnNumber()}`;
   const logger = makeLoggerMetadata(site.getFunctionName());
+  const executionId = context.current?.store.get('id');
 
-  if (!args.length) return { message: 'empty log', location, logger };
+  const meta = { timestamp: Date.now(), location, logger, trace: executionId };
+
+  if (!args.length) return { message: 'empty log', ...meta };
   if (args.length === 1) {
-    if (typeof args[0] === 'string') return { message: args[0], location, logger };
-    if (util.types.isNativeError(args[0])) return parseError(args[0], location, { logger });
-    return { ...args[0], location, logger };
+    if (typeof args[0] === 'string') return { message: args[0], ...meta };
+    if (util.types.isNativeError(args[0])) return parseError(args[0], meta);
+    return { ...args[0], ...meta };
   }
 
-  if (typeof args[0] === 'string') return { message: args.shift(), args, location, logger };
-  return { ...args, location, logger };
+  if (typeof args[0] === 'string') return { message: args.shift(), args, ...meta };
+  return { ...args, ...meta };
 }
 
 function apacheLogFormat(
@@ -66,10 +70,14 @@ export function serializeHttp(
   req: IncomingMessage,
   res: ServerResponse,
 ) {
+  const executionId = context.current?.store.get('id');
+
   return {
     level: getStatusLevel(res.statusCode),
     logObject: {
       message: apacheLogFormat(startDate, remoteClient, headers['Content-Length'], req, res),
+      timestamp: Date.now(),
+      trace: executionId,
       request: {
         headers: req.headers,
         http_version: req.httpVersion,

@@ -2,7 +2,11 @@
   "name": "bare-http",
   "version": "0.0.1",
   "description": "Lightweight and fast HTTP web server",
-  "main": "index.js",
+  "main": "lib/index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "__tests__"
+  },
   "scripts": {
     "test": "test"
   },
