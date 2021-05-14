@@ -16,7 +16,7 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-export class RequestFlow {
+export class FlowRequest {
   uuid: string;
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;
@@ -28,7 +28,11 @@ export class RequestFlow {
   private countTimeFormat: 'ms' | 's' = 's';
   private headers: { [header: string]: string | number } = {};
 
-  constructor(public _originalRequest: IncomingMessage, public _originalResponse: ServerResponse) {
+  constructor(
+    callLog = true,
+    public _originalRequest: IncomingMessage,
+    public _originalResponse: ServerResponse,
+  ) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
     this.remoteIp = _originalRequest.socket.remoteAddress;
 
@@ -36,6 +40,8 @@ export class RequestFlow {
     this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.uuid });
     this.startTime = process.hrtime();
 
+    // call logging section
+    if (callLog === false) return;
     _originalResponse.on('close', () =>
       logHttp(this.headers, this.startDate, this.remoteClient, _originalRequest, _originalResponse),
     );

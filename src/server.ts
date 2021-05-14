@@ -1,15 +1,16 @@
 import Router from 'find-my-way';
 
-import { RequestFlow } from './request';
+import { FlowRequest } from './request';
 import { logMe } from './logger';
+import { context, enableContext, newContext } from './context';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 import { Writable } from 'stream';
 
-type Middleware = (flow: RequestFlow) => Promise<void> | void;
-type Handler = (flow: RequestFlow) => any;
-type ErrorHandler = (err: any, flow: RequestFlow) => void;
+type Middleware = (flow: FlowRequest) => Promise<void> | void;
+type Handler = (flow: FlowRequest) => any;
+type ErrorHandler = (err: any, flow: FlowRequest) => void;
 type ServerParams = {
   middlewares?: Array<Middleware>;
   swaggerRoute?: string;
@@ -17,6 +18,14 @@ type ServerParams = {
   serverPort?: number;
   disableEtag?: boolean;
   enableRequestAbort?: boolean;
+  /**
+   * Default `true`
+   */
+  context?: boolean;
+  /**
+   * Default `true`
+   */
+  logging?: boolean;
   errorHandlerMiddleware?: ErrorHandler;
   /**
    * Default 's' - seconds
@@ -42,12 +51,14 @@ export class FlowServer {
   #middlewares: Array<Middleware> = [];
   #routes: Set<string> = new Set();
   #router = Router({ ignoreTrailingSlash: true });
-  #flows: Map<string, RequestFlow> = new Map();
+  #flows: Map<string, FlowRequest> = new Map();
   #errorHandler: ErrorHandler;
 
-  private generatedMiddlewares: any | (() => (flow: RequestFlow) => void);
+  private generatedMiddlewares: any | (() => (flow: FlowRequest) => void);
 
   constructor(private params: ServerParams = {}) {
+    if (params.context) enableContext();
+
     this.#server = createServer(this.listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
     params?.middlewares?.forEach((m) => this.use(m));
@@ -57,7 +68,10 @@ export class FlowServer {
   private listener(request: IncomingMessage, response: ServerResponse) {
     const { requestTimeFormat } = this.params;
 
-    const flow = new RequestFlow(request, response);
+    const flow = new FlowRequest(this.params.logging, request, response);
+
+    newContext('request');
+    context.current?.store.set('id', flow.uuid);
 
     if (requestTimeFormat) flow.setTimeFormat(requestTimeFormat);
 
@@ -102,7 +116,7 @@ export class FlowServer {
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
-  private async resolveMiddleware(order: number, flow: RequestFlow) {
+  private async resolveMiddleware(order: number, flow: FlowRequest) {
     try {
       const response = this.#middlewares[order](flow);
       if (response instanceof Promise) await response;
@@ -198,7 +212,7 @@ export class FlowServer {
     }
   }
 
-  private soundRouteReturn(response: any, flow: RequestFlow) {
+  private soundRouteReturn(response: any, flow: FlowRequest) {
     if (flow._originalResponse.headersSent) return;
 
     switch (response.constructor) {
@@ -229,7 +243,7 @@ export class FlowServer {
     return [...this.#routes.keys()];
   }
 
-  private basicErrorHandler(e: any, flow: RequestFlow) {
+  private basicErrorHandler(e: any, flow: FlowRequest) {
     flow.sendStatus(500);
   }
 }
