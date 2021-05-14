@@ -2,6 +2,7 @@ import Router from 'find-my-way';
 
 import { RequestFlow } from './request';
 import { logMe } from './logger';
+import { context } from './context';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -17,6 +18,14 @@ type ServerParams = {
   serverPort?: number;
   disableEtag?: boolean;
   enableRequestAbort?: boolean;
+  /**
+   * Default `true`
+   */
+  context?: boolean;
+  /**
+   * Default `true`
+   */
+  logging?: boolean;
   errorHandlerMiddleware?: ErrorHandler;
   /**
    * Default 's' - seconds
@@ -48,6 +57,8 @@ export class FlowServer {
   private generatedMiddlewares: any | (() => (flow: RequestFlow) => void);
 
   constructor(private params: ServerParams = {}) {
+    if (params.context) context.enable();
+
     this.#server = createServer(this.listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
     params?.middlewares?.forEach((m) => this.use(m));
@@ -57,7 +68,10 @@ export class FlowServer {
   private listener(request: IncomingMessage, response: ServerResponse) {
     const { requestTimeFormat } = this.params;
 
-    const flow = new RequestFlow(request, response);
+    const flow = new RequestFlow(this.params.logging, request, response);
+
+    context.newContext('request');
+    context.current?.store.set('id', flow.uuid);
 
     if (requestTimeFormat) flow.setTimeFormat(requestTimeFormat);
 
