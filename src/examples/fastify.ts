@@ -1,7 +1,7 @@
 import { uuidv4 } from '../utils';
 
 const fastify = require('fastify')({
-  logger: false,
+  logger: true,
 });
 
 // Declare a route

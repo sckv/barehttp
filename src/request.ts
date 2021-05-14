@@ -1,3 +1,9 @@
+import hyperid from 'hyperid';
+
+import { StatusCodes, StatusPhrases } from './utils/';
+import { JSONStringify } from './utils/safe-json';
+import { logHttp } from './logger';
+
 import type {
   IncomingHttpHeaders,
   IncomingMessage,
@@ -7,8 +13,7 @@ import type {
 } from 'http';
 import type { Socket } from 'net';
 import { Writable } from 'stream';
-import { uuidv4, StatusCodes, StatusPhrases } from './utils/';
-import { JSONStringify } from './utils/safe-json';
+const generateId = hyperid();
 
 type WebRequest = {
   headers: IncomingHttpHeaders;
@@ -93,48 +98,49 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-type FlowOpts = {
-  /**
-   * Default 's' - seconds
-   */
-  requestTimeFormat?: 's' | 'ms';
-};
-
 export class RequestFlow {
-  // request: WebRequest;
-  // response: WebResponse;
   uuid: string;
   params: { [k: string]: string | undefined } = {};
+  remoteIp?: string;
   private cache = true;
-  private statusToSend: number = 200;
+  private statusToSend = 200;
   private startTime: [seconds: number, nanoseconds: number];
+  private startDate = new Date();
+  private remoteClient = '';
   private countTimeFormat: 'ms' | 's' = 's';
   private headers: { [header: string]: string | number } = {};
 
-  constructor(
-    public _originalRequest: IncomingMessage,
-    public _originalResponse: ServerResponse,
-    opts?: FlowOpts,
-  ) {
-    this.uuid = (_originalRequest.headers['x-request-id'] as string) || uuidv4();
+  constructor(public _originalRequest: IncomingMessage, public _originalResponse: ServerResponse) {
+    this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
+    this.remoteIp = _originalRequest.socket.remoteAddress;
+
     (_originalRequest as any).id = this.uuid;
     this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.uuid });
     this.startTime = process.hrtime();
 
-    if (opts?.requestTimeFormat) this.countTimeFormat = opts.requestTimeFormat;
+    _originalResponse.on('close', () =>
+      logHttp(this.headers, this.startDate, this.remoteClient, _originalRequest, _originalResponse),
+    );
   }
 
+  setRemoteClient(remoteClient: string) {
+    this.remoteClient = remoteClient;
+  }
   private setRequestTime() {
-    var diff = process.hrtime(this.startTime);
+    const diff = process.hrtime(this.startTime);
 
-    var time =
+    const time =
       diff[0] * (this.countTimeFormat === 's' ? 1 : 1e3) +
       diff[1] * (this.countTimeFormat === 's' ? 1e-9 : 1e-6);
 
     this.setHeaders({
-      'X-Response-Time': time,
-      'X-Response-Time-Mode': this.countTimeFormat === 's' ? 'seconds' : 'milliseconds',
+      'X-Processing-Time': time,
+      'X-Processing-Time-Mode': this.countTimeFormat === 's' ? 'seconds' : 'milliseconds',
     });
+  }
+
+  setTimeFormat(format: 's' | 'ms') {
+    this.countTimeFormat = format;
   }
 
   disableCache() {
