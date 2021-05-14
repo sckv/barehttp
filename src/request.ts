@@ -2,7 +2,7 @@ import hyperid from 'hyperid';
 
 import { StatusCodes, StatusPhrases } from './utils/';
 import { JSONStringify } from './utils/safe-json';
-import { httpLogger } from './logger';
+import { logHttp } from './logger';
 
 import type {
   IncomingHttpHeaders,
@@ -98,31 +98,34 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-type FlowOpts = {
-  /**
-   * Default 's' - seconds
-   */
-  requestTimeFormat?: 's' | 'ms';
-};
-
 export class RequestFlow {
   uuid: string;
   params: { [k: string]: string | undefined } = {};
+  remoteIp?: string;
   private cache = true;
   private statusToSend = 200;
   private startTime: [seconds: number, nanoseconds: number];
+  private startDate = new Date();
+  private remoteClient = '';
   private countTimeFormat: 'ms' | 's' = 's';
   private headers: { [header: string]: string | number } = {};
 
   constructor(public _originalRequest: IncomingMessage, public _originalResponse: ServerResponse) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
+    this.remoteIp = _originalRequest.socket.remoteAddress;
+
     (_originalRequest as any).id = this.uuid;
     this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.uuid });
     this.startTime = process.hrtime();
 
-    // _originalResponse.on('close', () => setImmediate(() => httpLogger.info(this.headers)));
+    _originalResponse.on('close', () =>
+      logHttp(this.headers, this.startDate, this.remoteClient, _originalRequest, _originalResponse),
+    );
   }
 
+  setRemoteClient(remoteClient: string) {
+    this.remoteClient = remoteClient;
+  }
   private setRequestTime() {
     const diff = process.hrtime(this.startTime);
 
@@ -131,8 +134,8 @@ export class RequestFlow {
       diff[1] * (this.countTimeFormat === 's' ? 1e-9 : 1e-6);
 
     this.setHeaders({
-      'X-Response-Time': time,
-      'X-Response-Time-Mode': this.countTimeFormat === 's' ? 'seconds' : 'milliseconds',
+      'X-Processing-Time': time,
+      'X-Processing-Time-Mode': this.countTimeFormat === 's' ? 'seconds' : 'milliseconds',
     });
   }
 
