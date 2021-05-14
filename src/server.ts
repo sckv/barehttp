@@ -5,7 +5,7 @@ import { logMe } from './logger';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
-import { Readable, Writable } from 'stream';
+import { Writable } from 'stream';
 
 type Middleware = (flow: RequestFlow) => Promise<void> | void;
 type Handler = (flow: RequestFlow) => any;
@@ -182,15 +182,19 @@ export class FlowServer {
     if (opts?.disableCache) flow.disableCache();
     if (routeParams) flow.setParams(routeParams);
 
-    const routeReturn = handler(flow);
-    if (routeReturn instanceof Promise) {
-      routeReturn
-        .catch((e) => this.#errorHandler(e, flow))
-        .then((routeReturn) => {
-          if (routeReturn) this.soundRouteReturn(routeReturn, flow);
-        });
-    } else {
-      if (routeReturn) this.soundRouteReturn(routeReturn, flow);
+    try {
+      const routeReturn = handler(flow);
+      if (routeReturn instanceof Promise) {
+        routeReturn
+          .catch((e) => this.#errorHandler(e, flow))
+          .then((routeReturn) => {
+            if (routeReturn) this.soundRouteReturn(routeReturn, flow);
+          });
+      } else {
+        if (routeReturn) this.soundRouteReturn(routeReturn, flow);
+      }
+    } catch (e) {
+      this.#errorHandler(e, flow);
     }
   }
 
