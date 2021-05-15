@@ -42,7 +42,7 @@ import { BareHttp, logMe } from 'barehttp';
 
 const server = new BareHttp({ logging: false });
 
-server.route.get('/route', function routeV1() {
+server.route.get('/route', function routeV1(flow) {
   flow.json({ everythings: 'OK' });
 });
 
