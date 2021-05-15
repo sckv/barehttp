@@ -1,6 +1,6 @@
 import Router from 'find-my-way';
 
-import { FlowRequest } from './request';
+import { BareRequest } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 
@@ -8,9 +8,9 @@ import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 import { Writable } from 'stream';
 
-type Middleware = (flow: FlowRequest) => Promise<void> | void;
-type Handler = (flow: FlowRequest) => any;
-type ErrorHandler = (err: any, flow: FlowRequest) => void;
+type Middleware = (flow: BareRequest) => Promise<void> | void;
+type Handler = (flow: BareRequest) => any;
+type ErrorHandler = (err: any, flow: BareRequest) => void;
 type ServerParams = {
   middlewares?: Array<Middleware>;
   swaggerRoute?: string;
@@ -46,15 +46,15 @@ const HttpMethods = {
   head: 'HEAD',
 } as const;
 
-export class FlowServer {
+export class BareHttp {
   #server: Server | null = null;
   #middlewares: Array<Middleware> = [];
   #routes: Set<string> = new Set();
   #router = Router({ ignoreTrailingSlash: true });
-  #flows: Map<string, FlowRequest> = new Map();
+  #flows: Map<string, BareRequest> = new Map();
   #errorHandler: ErrorHandler;
 
-  private generatedMiddlewares: any | (() => (flow: FlowRequest) => void);
+  private generatedMiddlewares: any | (() => (flow: BareRequest) => void);
 
   constructor(private params: ServerParams = {}) {
     if (params.context) enableContext();
@@ -68,7 +68,7 @@ export class FlowServer {
   private listener(request: IncomingMessage, response: ServerResponse) {
     const { requestTimeFormat } = this.params;
 
-    const flow = new FlowRequest(this.params.logging, request, response);
+    const flow = new BareRequest(this.params.logging, request, response);
 
     newContext('request');
     context.current?.store.set('id', flow.uuid);
@@ -116,7 +116,7 @@ export class FlowServer {
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
-  private async resolveMiddleware(order: number, flow: FlowRequest) {
+  private async resolveMiddleware(order: number, flow: BareRequest) {
     try {
       const response = this.#middlewares[order](flow);
       if (response instanceof Promise) await response;
@@ -173,7 +173,7 @@ export class FlowServer {
           route: R,
           handler: Handler,
           opts?: RouteOpts,
-        ) => FlowServer;
+        ) => BareHttp;
       }
     >;
   }
@@ -212,7 +212,7 @@ export class FlowServer {
     }
   }
 
-  private soundRouteReturn(response: any, flow: FlowRequest) {
+  private soundRouteReturn(response: any, flow: BareRequest) {
     if (flow._originalResponse.headersSent) return;
 
     switch (response.constructor) {
@@ -243,7 +243,7 @@ export class FlowServer {
     return [...this.#routes.keys()];
   }
 
-  private basicErrorHandler(e: any, flow: FlowRequest) {
+  private basicErrorHandler(e: any, flow: BareRequest) {
     flow.sendStatus(500);
   }
 }

@@ -1,4 +1,4 @@
-# flowhttp
+# bare-http
 
 Full-featured slim webserver for microservices with extremely low overhead and production features
 
@@ -24,13 +24,13 @@ Install the service
 npm
 
 ```bash
-npm i flowhttp --save
+npm i barehttp --save
 ```
 
 yarn
 
 ```bash
-yarn add flowhttp
+yarn add barehttp
 ```
 
 ## Example
@@ -38,9 +38,9 @@ yarn add flowhttp
 ### Basic
 
 ```typescript
-import { FlowServer, logMe } from 'flowhttp';
+import { BareHttp, logMe } from 'barehttp';
 
-const server = new FlowServer({ logging: false });
+const server = new BareHttp({ logging: false });
 
 server.route.get('/route', function routeV1() {
   flow.json({ everythings: 'OK' });
@@ -52,16 +52,16 @@ server.use((flow) => {
 });
 
 server.start((address) => {
-  console.log(`FlowServer started at ${address}`);
+  console.log(`BareHttp started at ${address}`);
 });
 ```
 
 ### async-await
 
 ```typescript
-import { FlowServer, logMe } from 'flowhttp';
+import { BareHttp, logMe } from 'barehttp';
 
-const server = new FlowServer({ logging: false });
+const server = new BareHttp({ logging: false });
 
 server.route.get('/route', async function routeV1() {
   return { promised: 'data' };
@@ -74,7 +74,7 @@ server.use(async (flow) => {
 });
 
 server.start((address) => {
-  console.log(`FlowServer started at ${address}`);
+  console.log(`BareHttp started at ${address}`);
 });
 ```
 

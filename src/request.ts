@@ -16,7 +16,7 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-export class FlowRequest {
+export class BareRequest {
   uuid: string;
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;

@@ -1,7 +1,7 @@
 import { logMe } from '../logger';
-import { FlowServer } from '../server';
+import { BareHttp } from '../server';
 
-const server = new FlowServer({ logging: false });
+const server = new BareHttp({ logging: false });
 
 server.route.get('/route', async function routeV1() {
   logMe.info('message');
@@ -19,5 +19,5 @@ server
 console.log(server.getRoutes());
 
 server.start((address) => {
-  console.log(`FlowServer started at ${address}`);
+  console.log(`BareHttp started at ${address}`);
 });
