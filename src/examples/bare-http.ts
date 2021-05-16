@@ -1,10 +1,17 @@
 import { logMe } from '../logger';
-import { BareHttp } from '../server';
+import { BareServer } from '../server';
 
-const server = new BareHttp({ logging: false });
+const server = new BareServer();
 
-server.route.get('/route', async function routeV1() {
-  logMe.info('message');
+server.route.get('/route', async function routeV1(flow) {
+  // logMe.info('message');
+  throw new Error('wooooha');
+  return 'JUST MESSAGE';
+});
+
+server.route.post('/route', async function routeV1(flow) {
+  // logMe.info('message');
+  throw new Error('wooooha');
   return 'JUST MESSAGE';
 });
 

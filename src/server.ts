@@ -3,6 +3,7 @@ import Router from 'find-my-way';
 import { BareRequest } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
+import { generateReport } from './report';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -46,10 +47,12 @@ const HttpMethods = {
   head: 'HEAD',
 } as const;
 
-export class BareHttp {
+export type RouteReport = { hits: number; success: number; fails: number };
+
+export class BareServer {
   #server: Server | null = null;
   #middlewares: Array<Middleware> = [];
-  #routes: Set<string> = new Set();
+  #routes: Map<string, RouteReport> = new Map();
   #router = Router({ ignoreTrailingSlash: true });
   #flows: Map<string, BareRequest> = new Map();
   #errorHandler: ErrorHandler;
@@ -62,6 +65,7 @@ export class BareHttp {
     this.#server = createServer(this.listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
     params?.middlewares?.forEach((m) => this.use(m));
+    this.registerReport();
     return this;
   }
 
@@ -89,7 +93,7 @@ export class BareHttp {
     let order = 0;
     const maxOrder = this.#middlewares.length;
 
-    lines.push('return async () => {');
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
     if (maxOrder > 0) {
       while (order <= maxOrder - 1) {
@@ -98,11 +102,9 @@ export class BareHttp {
       }
     }
 
-    lines.push('}');
-
     const text = lines.join('\n');
 
-    this.generatedMiddlewares = new Function('flow', text) as any;
+    this.generatedMiddlewares = new AsyncFunction('flow', text) as any;
   }
 
   private async applyMiddlewares(flowId: string) {
@@ -112,7 +114,7 @@ export class BareHttp {
     const remoteClient = await dns.promises.reverse(flow.remoteIp!);
     flow.setRemoteClient(remoteClient[0]);
 
-    if (this.#middlewares.length) await this.generatedMiddlewares(flow)();
+    if (this.#middlewares.length) await this.generatedMiddlewares(flow);
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
@@ -157,13 +159,15 @@ export class BareHttp {
       {},
       {
         get(_, key) {
-          if (Object.keys(HttpMethods).includes(key as string)) {
+          if (typeof key === 'symbol') return self;
+
+          if (Object.keys(HttpMethods).includes(key)) {
             return function (...args: any[]) {
-              self.#routes.add(self.encodeRoute(HttpMethods.get, args[0], args[2]));
-              self.setRoute(HttpMethods.get, args[0], args[1], args[2]);
+              self.setRoute(HttpMethods[key], args[0], args[1], args[2]);
               return self;
             };
           }
+
           return self;
         },
       },
@@ -173,21 +177,33 @@ export class BareHttp {
           route: R,
           handler: Handler,
           opts?: RouteOpts,
-        ) => BareHttp;
+        ) => BareServer;
       }
     >;
   }
 
   private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
-    this.#router.on(method, route, (req, _, routeParams) =>
-      this.handleRoute(req, routeParams, handler, opts),
-    );
+    const encode = this.encodeRoute(method, route);
+    this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
+
+    this.#router.on(method, route, (req, _, routeParams) => {
+      this.#routes.get(encode)!.hits++;
+      this.handleRoute(req, routeParams, handler, encode, opts);
+    });
+  }
+
+  private registerReport() {
+    this.setRoute('GET', '/_report', (flow) => {
+      flow.setHeader('content-type', 'text/html');
+      flow.send(generateReport(this.#routes));
+    });
   }
 
   private handleRoute(
     req: IncomingMessage,
     routeParams: { [k: string]: string | undefined },
     handler: Handler,
+    encodedRoute: string,
     opts?: RouteOpts,
   ) {
     const flow = this.#flows.get((req as any).id)!;
@@ -196,6 +212,13 @@ export class BareHttp {
     if (opts?.disableCache) flow.disableCache();
     if (routeParams) flow.setParams(routeParams);
 
+    flow._originalRequest.on('close', () => {
+      if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
+        this.#routes.get(encodedRoute)!.success++;
+      } else {
+        this.#routes.get(encodedRoute)!.fails++;
+      }
+    });
     try {
       const routeReturn = handler(flow);
       if (routeReturn instanceof Promise) {
@@ -244,6 +267,7 @@ export class BareHttp {
   }
 
   private basicErrorHandler(e: any, flow: BareRequest) {
-    flow.sendStatus(500);
+    flow.status(500);
+    flow.json({ ...e, message: e.message, stack: e.stack });
   }
 }
