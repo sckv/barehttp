@@ -21,7 +21,7 @@ export class BareRequest {
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   private cache = true;
-  private statusToSend = 200;
+  statusToSend = 200;
   private startTime: [seconds: number, nanoseconds: number];
   private startDate = new Date();
   private remoteClient = '';
