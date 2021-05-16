@@ -38,9 +38,9 @@ yarn add barehttp
 ### Basic
 
 ```typescript
-import { BareHttp, logMe } from 'barehttp';
+import { BareServer, logMe } from 'barehttp';
 
-const server = new BareHttp({ logging: false });
+const server = new BareServer({ logging: false });
 
 server.route.get('/route', function routeV1(flow) {
   flow.json({ everythings: 'OK' });
@@ -52,16 +52,16 @@ server.use((flow) => {
 });
 
 server.start((address) => {
-  console.log(`BareHttp started at ${address}`);
+  console.log(`BareServer started at ${address}`);
 });
 ```
 
 ### async-await
 
 ```typescript
-import { BareHttp, logMe } from 'barehttp';
+import { BareServer, logMe } from 'barehttp';
 
-const server = new BareHttp({ logging: false });
+const server = new BareServer({ logging: false });
 
 server.route.get('/route', async function routeV1() {
   return { promised: 'data' };
@@ -74,7 +74,7 @@ server.use(async (flow) => {
 });
 
 server.start((address) => {
-  console.log(`BareHttp started at ${address}`);
+  console.log(`BareServer started at ${address}`);
 });
 ```
 
@@ -87,7 +87,7 @@ Some of the features are in progress.
 - [x] Request-Processing-Time header and value
 - [x] Promised or conventional middlewares
 - [x] Logging and serialized with `pino`
-- [ ] Routes usage report and endpoint
+- [x] Routes usage report and endpoint
 - [ ] Cache headers handy handling, per route
 - [ ] Cookies creation/parsing
 - [ ] Request execution cancellation by timeout
