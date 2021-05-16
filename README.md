@@ -1,4 +1,4 @@
-# bare-http
+# barehttp
 
 Full-featured slim webserver for microservices with extremely low overhead and production features
 
