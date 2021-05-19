@@ -1,6 +1,5 @@
 import callsites from 'callsites';
 
-import pJson from '../../package.json';
 import { context } from '../context';
 
 import util from 'util';
@@ -17,7 +16,7 @@ export function parseError(e: any, meta: any) {
 
 const makeLoggerMetadata = (method: string | null) => ({
   name: 'pino',
-  version: pJson.version,
+  version: 'v1.0.0',
   method_name: method,
 });
 
