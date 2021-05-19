@@ -1,8 +1,9 @@
 import hyperid from 'hyperid';
 
 import { StatusCodes, StatusPhrases } from './utils/';
-import { JSONStringify } from './utils/safe-json';
+import { JSONParse, JSONStringify } from './utils/safe-json';
 import { logHttp } from './logger';
+import { ContentType } from './utils/content-type';
 
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
@@ -20,13 +21,16 @@ export class BareRequest {
   uuid: string;
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;
-  private cache = true;
+  requestBody?: any;
   statusToSend = 200;
+
+  private cache = true;
   private startTime: [seconds: number, nanoseconds: number];
   private startDate = new Date();
   private remoteClient = '';
   private countTimeFormat: 'ms' | 's' = 's';
   private headers: { [header: string]: string | number } = {};
+  private contentType?: keyof typeof ContentType;
 
   constructor(
     callLog = true,
@@ -35,8 +39,10 @@ export class BareRequest {
   ) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
     this.remoteIp = _originalRequest.socket.remoteAddress;
+    this.contentType = this._originalRequest.headers['content-type'] as any;
 
-    (_originalRequest as any).id = this.uuid;
+    _originalRequest['id'] = this.uuid; // to receive an id later on in the route handler
+
     this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.uuid });
     this.startTime = process.hrtime();
 
@@ -47,9 +53,46 @@ export class BareRequest {
     );
   }
 
+  readBody() {
+    return new Promise<void>((resolve, reject) => {
+      const temp: any = [];
+      if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!)) {
+        this._originalRequest
+          .on('data', (chunk) => temp.push(chunk))
+          .on('end', () => {
+            this.requestBody = this.classifyRequestBody(temp);
+            resolve();
+          })
+          .on('error', reject);
+      }
+    });
+  }
+
+  classifyRequestBody(data: Buffer[]) {
+    const wholeChunk = Buffer.concat(data);
+    switch (this.contentType) {
+      case 'text/plain':
+        return wholeChunk.toString();
+      case 'application/json':
+        return JSONParse(wholeChunk.toString());
+      case 'application/x-www-form-urlencoded':
+        const store = {};
+        for (const curr of wholeChunk.toString().split('&')) {
+          const [key, value] = curr.split('=');
+          if (!key || !value) return null; // form urlencoded is not correct
+          store[key] = value;
+        }
+
+        return store;
+      default:
+        return Buffer.concat(data);
+    }
+  }
+
   setRemoteClient(remoteClient: string) {
     this.remoteClient = remoteClient;
   }
+
   private setRequestTime() {
     const diff = process.hrtime(this.startTime);
 
@@ -102,7 +145,7 @@ export class BareRequest {
     // to generate with fast-json-stringify schema issue #1
     const jsoned = JSONStringify(data);
     this.setHeader('Content-Type', 'application/json');
-    this.send(jsoned);
+    this.send(jsoned ? jsoned : undefined);
   }
 
   send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
