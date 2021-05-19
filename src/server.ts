@@ -109,6 +109,7 @@ export class BareServer {
 
   private async applyMiddlewares(flowId: string) {
     const flow = this.#flows.get(flowId)!;
+    await flow.readBody();
 
     // to test in cloud provider
     const remoteClient = await dns.promises.reverse(flow.remoteIp!);
@@ -161,7 +162,7 @@ export class BareServer {
         get(_, key) {
           if (typeof key === 'symbol') return self;
 
-          if (Object.keys(HttpMethods).includes(key)) {
+          if (Object.keys(HttpMethods).includes(key as string)) {
             return function (...args: any[]) {
               self.setRoute(HttpMethods[key], args[0], args[1], args[2]);
               return self;
