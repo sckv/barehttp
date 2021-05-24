@@ -22,6 +22,7 @@ export class BareRequest {
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;
+  requestHeaders: { [key: string]: any };
   statusToSend = 200;
 
   private cache = true;
@@ -33,13 +34,14 @@ export class BareRequest {
   private contentType?: keyof typeof ContentType;
 
   constructor(
-    callLog = true,
     public _originalRequest: IncomingMessage,
     public _originalResponse: ServerResponse,
+    logging,
   ) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
     this.remoteIp = _originalRequest.socket.remoteAddress;
     this.contentType = this._originalRequest.headers['content-type'] as any;
+    this.requestHeaders = this._originalRequest.headers;
 
     _originalRequest['id'] = this.uuid; // to receive an id later on in the route handler
 
@@ -47,16 +49,23 @@ export class BareRequest {
     this.startTime = process.hrtime();
 
     // call logging section
-    if (callLog === false) return;
-    _originalResponse.on('close', () =>
-      logHttp(this.headers, this.startDate, this.remoteClient, _originalRequest, _originalResponse),
-    );
+    if (logging === true) {
+      _originalResponse.on('close', () =>
+        logHttp(
+          this.headers,
+          this.startDate,
+          this.remoteClient,
+          _originalRequest,
+          _originalResponse,
+        ),
+      );
+    }
   }
 
   readBody() {
-    return new Promise<void>((resolve, reject) => {
-      const temp: any = [];
-      if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!)) {
+    if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!))
+      return new Promise<void>((resolve, reject) => {
+        const temp: any = [];
         this._originalRequest
           .on('data', (chunk) => temp.push(chunk))
           .on('end', () => {
@@ -64,8 +73,7 @@ export class BareRequest {
             resolve();
           })
           .on('error', reject);
-      }
-    });
+      });
   }
 
   classifyRequestBody(data: Buffer[]) {

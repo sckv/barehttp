@@ -11,24 +11,35 @@ import { Writable } from 'stream';
 
 type Middleware = (flow: BareRequest) => Promise<void> | void;
 type Handler = (flow: BareRequest) => any;
+
+interface HandlerExposed {
+  <R extends `/${string}`>(route: R, handler: Handler): BareServer<any>;
+  <R extends `/${string}`>(route: R, opts: RouteOpts, handler: Handler): BareServer<any>;
+}
+
 type ErrorHandler = (err: any, flow: BareRequest) => void;
-type ServerParams = {
+
+type ServerParams<A extends `${number}.${number}.${number}.${number}`> = {
   middlewares?: Array<Middleware>;
-  swaggerRoute?: string;
-  bodyParserLimit?: '512kb' | '1mb' | '2mb' | '4mb' | '8mb' | '16mb';
   serverPort?: number;
-  disableEtag?: boolean;
-  enableRequestAbort?: boolean;
   /**
-   * Default `true`
+   * Address to bind the web server to
+   * Default '0.0.0.0'
+   */
+  serverAddress?: A | 'localhost';
+  /**
+   * Enable request context storage
+   * Default `false`
    */
   context?: boolean;
   /**
-   * Default `true`
+   * Enable request/response predefined logging
+   * Default `false`
    */
   logging?: boolean;
   errorHandlerMiddleware?: ErrorHandler;
   /**
+   * Request time format in `seconds` or `milliseconds`
    * Default 's' - seconds
    */
   requestTimeFormat?: 's' | 'ms';
@@ -49,8 +60,8 @@ const HttpMethods = {
 
 export type RouteReport = { hits: number; success: number; fails: number };
 
-export class BareServer {
-  #server: Server | null = null;
+export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
+  server: Server;
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
   #router = Router({ ignoreTrailingSlash: true });
@@ -59,20 +70,21 @@ export class BareServer {
 
   private generatedMiddlewares: any | (() => (flow: BareRequest) => void);
 
-  constructor(private params: ServerParams = {}) {
+  constructor(private params: ServerParams<A> = {}) {
     if (params.context) enableContext();
 
-    this.#server = createServer(this.listener.bind(this));
+    this.server = createServer(this.listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
-    params?.middlewares?.forEach((m) => this.use(m));
+    this.#middlewares.push(...(params?.middlewares || []));
+
     this.registerReport();
     return this;
   }
 
   private listener(request: IncomingMessage, response: ServerResponse) {
-    const { requestTimeFormat } = this.params;
+    const { requestTimeFormat, logging } = this.params;
 
-    const flow = new BareRequest(this.params.logging, request, response);
+    const flow = new BareRequest(request, response, logging);
 
     newContext('request');
     context.current?.store.set('id', flow.uuid);
@@ -119,6 +131,10 @@ export class BareServer {
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
+  private applyCookieParser() {
+    this.#middlewares.push();
+  }
+
   private async resolveMiddleware(order: number, flow: BareRequest) {
     try {
       const response = this.#middlewares[order](flow);
@@ -129,10 +145,13 @@ export class BareServer {
   }
 
   start(cb?: (address: string) => void) {
+    this.writeMiddlewares();
+
     const port = this.params?.serverPort || process.env.PORT || 3000;
+    const address = this.params?.serverAddress || '0.0.0.0';
 
     // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
-    this.#server?.listen(+port, '0.0.0.0', undefined, () =>
+    this.server.listen(+port, address, undefined, () =>
       cb ? cb(`http://localhost:${port}`) : void 0,
     );
   }
@@ -144,12 +163,11 @@ export class BareServer {
         flow.send('Server terminated');
       }
     }
-    this.#server?.close(cb);
+    this.server?.close(cb);
   }
 
   use(middleware: Middleware) {
     this.#middlewares.push(middleware);
-    this.writeMiddlewares();
     return this;
   }
 
@@ -164,7 +182,15 @@ export class BareServer {
 
           if (Object.keys(HttpMethods).includes(key as string)) {
             return function (...args: any[]) {
-              self.setRoute(HttpMethods[key], args[0], args[1], args[2]);
+              let handler,
+                opts = undefined;
+              if (typeof args[1] === 'function') {
+                handler = args[1];
+              } else if (typeof args[2] === 'function') {
+                handler = args[2];
+                opts = args[1];
+              }
+              self.setRoute(HttpMethods[key], args[0], handler, opts);
               return self;
             };
           }
@@ -174,11 +200,7 @@ export class BareServer {
       },
     ) as Readonly<
       {
-        [K in keyof typeof HttpMethods]: <R extends `/${string}`>(
-          route: R,
-          handler: Handler,
-          opts?: RouteOpts,
-        ) => BareServer;
+        [K in keyof typeof HttpMethods]: HandlerExposed;
       }
     >;
   }
@@ -203,7 +225,7 @@ export class BareServer {
   private handleRoute(
     req: IncomingMessage,
     routeParams: { [k: string]: string | undefined },
-    handler: Handler,
+    handle: Handler,
     encodedRoute: string,
     opts?: RouteOpts,
   ) {
@@ -220,16 +242,15 @@ export class BareServer {
         this.#routes.get(encodedRoute)!.fails++;
       }
     });
+
     try {
-      const routeReturn = handler(flow);
+      const routeReturn = handle.bind(undefined)(flow);
       if (routeReturn instanceof Promise) {
         routeReturn
           .catch((e) => this.#errorHandler(e, flow))
-          .then((routeReturn) => {
-            if (routeReturn) this.soundRouteReturn(routeReturn, flow);
-          });
+          .then((result) => this.soundRouteReturn(result, flow));
       } else {
-        if (routeReturn) this.soundRouteReturn(routeReturn, flow);
+        this.soundRouteReturn(routeReturn, flow);
       }
     } catch (e) {
       this.#errorHandler(e, flow);
@@ -238,6 +259,7 @@ export class BareServer {
 
   private soundRouteReturn(response: any, flow: BareRequest) {
     if (flow._originalResponse.headersSent) return;
+    if (!response) flow.send();
 
     switch (response.constructor) {
       case Uint8Array:
@@ -259,7 +281,7 @@ export class BareServer {
     }
   }
 
-  private encodeRoute(method: string, route: string, opts?: RouteOpts) {
+  private encodeRoute(method: string, route: string) {
     return `${method} ${route}`;
   }
 
