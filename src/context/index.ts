@@ -11,6 +11,7 @@ type Context = {
 };
 
 const newContext = (type: string) => {
+  if (!context.enabled) return;
   context.current = new Execution(type);
   running.set(asyncHooks.executionAsyncId(), context.current);
 };
