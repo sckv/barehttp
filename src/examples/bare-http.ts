@@ -1,12 +1,14 @@
 import { logMe } from '../logger';
 import { BareServer } from '../server';
 
-const server = new BareServer({ context: true, logging: true, serverAddress: '0.0.0.0' });
+const server = new BareServer({ context: true, logging: true, cookies: true });
 
 // const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 server.route.get('/route', { disableCache: true }, async function handle(flow) {
+  console.log(flow.getCookies());
   return 'JUST MESSAGE 2';
 });
+
 // server.route.get('/route', async function routeV1(flow) {
 //   // this.cache = 'asdf';
 

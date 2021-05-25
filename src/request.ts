@@ -4,6 +4,7 @@ import { StatusCodes, StatusPhrases } from './utils/';
 import { JSONParse, JSONStringify } from './utils/safe-json';
 import { logHttp } from './logger';
 import { ContentType } from './utils/content-type';
+import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie';
 
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
@@ -24,13 +25,15 @@ export class BareRequest {
   requestBody?: any;
   requestHeaders: { [key: string]: any };
   statusToSend = 200;
+  cm?: CookieManager;
 
   private cache = true;
   private startTime: [seconds: number, nanoseconds: number];
   private startDate = new Date();
   private remoteClient = '';
   private countTimeFormat: 'ms' | 's' = 's';
-  private headers: { [header: string]: string | number } = {};
+  private headers: { [header: string]: string | string[] } = {};
+  private cookies: { [cooke: string]: string } = {};
   private contentType?: keyof typeof ContentType;
 
   constructor(
@@ -74,6 +77,27 @@ export class BareRequest {
           })
           .on('error', reject);
       });
+  }
+
+  _attachCookieManager(opts?: CookieManagerOptions) {
+    this.cm = new CookieManager(opts, this);
+  }
+
+  _populateCookies(cookies?: { [cookie: string]: string }) {
+    if (!cookies) return;
+    this.cookies = cookies;
+  }
+
+  getHeader(header: string) {
+    return this.headers[header];
+  }
+
+  getCookie(cookie: string) {
+    return this.cookies[cookie];
+  }
+
+  getCookies() {
+    return { ...this.cookies };
   }
 
   classifyRequestBody(data: Buffer[]) {
@@ -126,13 +150,13 @@ export class BareRequest {
     this.params = params;
   }
 
-  setHeader(header: string, value: string | number) {
-    this.headers[header] = value;
+  setHeader(header: string, value: string | number | string[] | number[]) {
+    this.headers[header] = Array.isArray(value) ? value.map((v) => '' + v).join('; ') : '' + value;
   }
 
   setHeaders(headers: { [header: string]: string | number }) {
     for (const header of Object.keys(headers)) {
-      this.headers[header] = headers[header];
+      this.headers[header] = '' + headers[header];
     }
   }
 
