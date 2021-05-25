@@ -4,6 +4,7 @@ import { BareRequest } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 import { generateReport } from './report';
+import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -43,6 +44,13 @@ type ServerParams<A extends `${number}.${number}.${number}.${number}`> = {
    * Default 's' - seconds
    */
   requestTimeFormat?: 's' | 'ms';
+
+  /**
+   * Control over cookies.
+   * This will enable automatic cookies decoding
+   */
+  cookies?: boolean;
+  cookiesOptions?: CookieManagerOptions;
 };
 type RouteOpts = {
   disableCache?: boolean;
@@ -68,7 +76,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   #flows: Map<string, BareRequest> = new Map();
   #errorHandler: ErrorHandler;
 
-  private generatedMiddlewares: any | (() => (flow: BareRequest) => void);
+  #generatedMiddlewares: (flow: BareRequest) => void = (_) => _;
 
   constructor(private params: ServerParams<A> = {}) {
     if (params.context) enableContext();
@@ -116,24 +124,28 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     const text = lines.join('\n');
 
-    this.generatedMiddlewares = new AsyncFunction('flow', text) as any;
+    this.#generatedMiddlewares = new AsyncFunction('flow', text) as any;
   }
 
   private async applyMiddlewares(flowId: string) {
     const flow = this.#flows.get(flowId)!;
     await flow.readBody();
 
+    if (this.params.cookies) {
+      flow._attachCookieManager(this.params.cookiesOptions);
+    }
+
     // to test in cloud provider
     const remoteClient = await dns.promises.reverse(flow.remoteIp!);
     flow.setRemoteClient(remoteClient[0]);
 
-    if (this.#middlewares.length) await this.generatedMiddlewares(flow);
+    if (this.#middlewares.length) await this.#generatedMiddlewares(flow);
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
-  private applyCookieParser() {
-    this.#middlewares.push();
-  }
+  // private applyCookieParser() {
+  //   this.#middlewares.push();
+  // }
 
   private async resolveMiddleware(order: number, flow: BareRequest) {
     try {
