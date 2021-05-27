@@ -4,6 +4,7 @@ import { StatusCodes, StatusPhrases } from './utils/';
 import { JSONParse, JSONStringify } from './utils/safe-json';
 import { logHttp } from './logger';
 import { ContentType } from './utils/content-type';
+import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
 
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
@@ -22,24 +23,28 @@ export class BareRequest {
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;
+  requestHeaders: { [key: string]: any };
   statusToSend = 200;
+  cm?: CookieManager;
 
   private cache = true;
   private startTime: [seconds: number, nanoseconds: number];
   private startDate = new Date();
   private remoteClient = '';
   private countTimeFormat: 'ms' | 's' = 's';
-  private headers: { [header: string]: string | number } = {};
+  private headers: { [header: string]: string | string[] } = {};
+  private cookies: { [cooke: string]: string } = {};
   private contentType?: keyof typeof ContentType;
 
   constructor(
-    callLog = true,
     public _originalRequest: IncomingMessage,
     public _originalResponse: ServerResponse,
+    logging,
   ) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
     this.remoteIp = _originalRequest.socket.remoteAddress;
     this.contentType = this._originalRequest.headers['content-type'] as any;
+    this.requestHeaders = this._originalRequest.headers;
 
     _originalRequest['id'] = this.uuid; // to receive an id later on in the route handler
 
@@ -47,16 +52,23 @@ export class BareRequest {
     this.startTime = process.hrtime();
 
     // call logging section
-    if (callLog === false) return;
-    _originalResponse.on('close', () =>
-      logHttp(this.headers, this.startDate, this.remoteClient, _originalRequest, _originalResponse),
-    );
+    if (logging === true) {
+      _originalResponse.on('close', () =>
+        logHttp(
+          this.headers,
+          this.startDate,
+          this.remoteClient,
+          _originalRequest,
+          _originalResponse,
+        ),
+      );
+    }
   }
 
-  readBody() {
-    return new Promise<void>((resolve, reject) => {
-      const temp: any = [];
-      if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!)) {
+  private readBody() {
+    if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!))
+      return new Promise<void>((resolve, reject) => {
+        const temp: any = [];
         this._originalRequest
           .on('data', (chunk) => temp.push(chunk))
           .on('end', () => {
@@ -64,11 +76,18 @@ export class BareRequest {
             resolve();
           })
           .on('error', reject);
-      }
-    });
+      });
   }
 
-  classifyRequestBody(data: Buffer[]) {
+  private attachCookieManager(opts?: CookieManagerOptions) {
+    this.cm = new CookieManager(opts, this);
+  }
+
+  private populateCookies() {
+    this.cookies = this.cm?.parseCookie(this._originalRequest.headers.cookie) || {};
+  }
+
+  private classifyRequestBody(data: Buffer[]) {
     const wholeChunk = Buffer.concat(data);
     switch (this.contentType) {
       case 'text/plain':
@@ -89,7 +108,7 @@ export class BareRequest {
     }
   }
 
-  setRemoteClient(remoteClient: string) {
+  private setRemoteClient(remoteClient: string) {
     this.remoteClient = remoteClient;
   }
 
@@ -106,8 +125,22 @@ export class BareRequest {
     });
   }
 
-  setTimeFormat(format: 's' | 'ms') {
+  private setTimeFormat(format: 's' | 'ms') {
     this.countTimeFormat = format;
+  }
+
+  // ======== PUBLIC APIS ========
+
+  getHeader(header: string) {
+    return this.headers[header];
+  }
+
+  getCookie(cookie: string) {
+    return this.cookies[cookie];
+  }
+
+  getCookies() {
+    return { ...this.cookies };
   }
 
   disableCache() {
@@ -118,13 +151,13 @@ export class BareRequest {
     this.params = params;
   }
 
-  setHeader(header: string, value: string | number) {
-    this.headers[header] = value;
+  setHeader(header: string, value: string | number | string[] | number[]) {
+    this.headers[header] = Array.isArray(value) ? value.map((v) => '' + v).join('; ') : '' + value;
   }
 
   setHeaders(headers: { [header: string]: string | number }) {
     for (const header of Object.keys(headers)) {
-      this.headers[header] = headers[header];
+      this.headers[header] = '' + headers[header];
     }
   }
 
