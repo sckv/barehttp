@@ -4,7 +4,7 @@ import { BareRequest } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 import { generateReport } from './report';
-import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie';
+import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -44,13 +44,16 @@ type ServerParams<A extends `${number}.${number}.${number}.${number}`> = {
    * Default 's' - seconds
    */
   requestTimeFormat?: 's' | 'ms';
-
   /**
    * Control over cookies.
    * This will enable automatic cookies decoding
    */
   cookies?: boolean;
   cookiesOptions?: CookieManagerOptions;
+  /**
+   * Log the resolved reverse DNS first hop for remote ip of the client (first proxy)
+   */
+  reverseDns?: boolean;
 };
 type RouteOpts = {
   disableCache?: boolean;
@@ -76,20 +79,21 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   #flows: Map<string, BareRequest> = new Map();
   #errorHandler: ErrorHandler;
 
-  #generatedMiddlewares: (flow: BareRequest) => void = (_) => _;
+  #runMiddlewaresSequence: (flow: BareRequest) => void = (_) => _;
 
   constructor(private params: ServerParams<A> = {}) {
     if (params.context) enableContext();
 
-    this.server = createServer(this.listener.bind(this));
+    this.server = createServer(this.#listener.bind(this));
     this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
+
     this.#middlewares.push(...(params?.middlewares || []));
 
     this.registerReport();
     return this;
   }
 
-  private listener(request: IncomingMessage, response: ServerResponse) {
+  #listener = (request: IncomingMessage, response: ServerResponse) => {
     const { requestTimeFormat, logging } = this.params;
 
     const flow = new BareRequest(request, response, logging);
@@ -97,18 +101,18 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     newContext('request');
     context.current?.store.set('id', flow.uuid);
 
-    if (requestTimeFormat) flow.setTimeFormat(requestTimeFormat);
+    if (requestTimeFormat) flow['setTimeFormat'](requestTimeFormat);
 
     request.on('close', () => this.#flows.delete(flow.uuid)); // remove already finished flow from the memory
 
     this.#flows.set(flow.uuid, flow);
     this.applyMiddlewares(flow.uuid);
-  }
+  };
 
   /**
    * This function generates defined middlewares for the sequential execution
    */
-  private writeMiddlewares() {
+  #writeMiddlewares = () => {
     const lines: string[] = [];
     let order = 0;
     const maxOrder = this.#middlewares.length;
@@ -124,29 +128,32 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     const text = lines.join('\n');
 
-    this.#generatedMiddlewares = new AsyncFunction('flow', text) as any;
-  }
+    this.#runMiddlewaresSequence = new AsyncFunction('flow', text);
+  };
 
   private async applyMiddlewares(flowId: string) {
     const flow = this.#flows.get(flowId)!;
-    await flow.readBody();
+    await flow['readBody']();
 
+    // attach special cookies middleware
     if (this.params.cookies) {
-      flow._attachCookieManager(this.params.cookiesOptions);
+      flow['attachCookieManager'](this.params.cookiesOptions);
+      flow['populateCookies']();
     }
 
     // to test in cloud provider
-    const remoteClient = await dns.promises.reverse(flow.remoteIp!);
-    flow.setRemoteClient(remoteClient[0]);
+    if (this.params.reverseDns) {
+      const remoteClient = await dns.promises.reverse(flow.remoteIp!);
+      flow['setRemoteClient'](remoteClient[0]);
+    }
 
-    if (this.#middlewares.length) await this.#generatedMiddlewares(flow);
+    if (this.#middlewares.length) await this.#runMiddlewaresSequence(flow);
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
-  // private applyCookieParser() {
-  //   this.#middlewares.push();
-  // }
-
+  /**
+   * This handler is used in async generated middlewares runtime function
+   */
   private async resolveMiddleware(order: number, flow: BareRequest) {
     try {
       const response = this.#middlewares[order](flow);
@@ -154,67 +161,6 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     } catch (e) {
       this.#errorHandler(e, flow);
     }
-  }
-
-  start(cb?: (address: string) => void) {
-    this.writeMiddlewares();
-
-    const port = this.params?.serverPort || process.env.PORT || 3000;
-    const address = this.params?.serverAddress || '0.0.0.0';
-
-    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
-    this.server.listen(+port, address, undefined, () =>
-      cb ? cb(`http://localhost:${port}`) : void 0,
-    );
-  }
-
-  stop(cb?: (e?: Error) => void) {
-    for (const flow of Object.values(this.#flows)) {
-      if (!flow._originalResponse.headersSent) {
-        flow.status(500);
-        flow.send('Server terminated');
-      }
-    }
-    this.server?.close(cb);
-  }
-
-  use(middleware: Middleware) {
-    this.#middlewares.push(middleware);
-    return this;
-  }
-
-  get route() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    return new Proxy(
-      {},
-      {
-        get(_, key) {
-          if (typeof key === 'symbol') return self;
-
-          if (Object.keys(HttpMethods).includes(key as string)) {
-            return function (...args: any[]) {
-              let handler,
-                opts = undefined;
-              if (typeof args[1] === 'function') {
-                handler = args[1];
-              } else if (typeof args[2] === 'function') {
-                handler = args[2];
-                opts = args[1];
-              }
-              self.setRoute(HttpMethods[key], args[0], handler, opts);
-              return self;
-            };
-          }
-
-          return self;
-        },
-      },
-    ) as Readonly<
-      {
-        [K in keyof typeof HttpMethods]: HandlerExposed;
-      }
-    >;
   }
 
   private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
@@ -297,12 +243,75 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     return `${method} ${route}`;
   }
 
+  private basicErrorHandler(e: any, flow: BareRequest) {
+    flow.status(500);
+    flow.json({ ...e, message: e.message, stack: e.stack });
+  }
+
+  // ========= PUBLIC APIS ==========
+
+  start(cb?: (address: string) => void) {
+    this.#writeMiddlewares();
+
+    const port = this.params?.serverPort || process.env.PORT || 3000;
+    const address = this.params?.serverAddress || '0.0.0.0';
+
+    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
+    this.server.listen(+port, address, undefined, () =>
+      cb ? cb(`http://localhost:${port}`) : void 0,
+    );
+  }
+
+  stop(cb?: (e?: Error) => void) {
+    for (const flow of Object.values(this.#flows)) {
+      if (!flow._originalResponse.headersSent) {
+        flow.status(500);
+        flow.send('Server terminated');
+      }
+    }
+    this.server?.close(cb);
+  }
+
+  use(middleware: Middleware) {
+    this.#middlewares.push(middleware);
+    return this;
+  }
+
   getRoutes() {
     return [...this.#routes.keys()];
   }
 
-  private basicErrorHandler(e: any, flow: BareRequest) {
-    flow.status(500);
-    flow.json({ ...e, message: e.message, stack: e.stack });
+  get route() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return new Proxy(
+      {},
+      {
+        get(_, key) {
+          if (typeof key === 'symbol') return self;
+
+          if (Object.keys(HttpMethods).includes(key as string)) {
+            return function (...args: any[]) {
+              let handler,
+                opts = undefined;
+              if (typeof args[1] === 'function') {
+                handler = args[1];
+              } else if (typeof args[2] === 'function') {
+                handler = args[2];
+                opts = args[1];
+              }
+              self.setRoute(HttpMethods[key], args[0], handler, opts);
+              return self;
+            };
+          }
+
+          return self;
+        },
+      },
+    ) as Readonly<
+      {
+        [K in keyof typeof HttpMethods]: HandlerExposed;
+      }
+    >;
   }
 }
