@@ -89,7 +89,7 @@ Some of the features are in progress.
 - [x] Logging and serialized with `pino`
 - [x] Routes usage report and endpoint
 - [ ] Cache headers handy handling, per route
-- [ ] Cookies creation/parsing
+- [x] Cookies creation/parsing
 - [ ] Request execution cancellation by timeout
 - [ ] Streaming of chunked multipart response
 - [ ] Safe and fast serialization-deserialization of JSON
