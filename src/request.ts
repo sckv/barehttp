@@ -4,7 +4,7 @@ import { StatusCodes, StatusPhrases } from './utils/';
 import { JSONParse, JSONStringify } from './utils/safe-json';
 import { logHttp } from './logger';
 import { ContentType } from './utils/content-type';
-import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie';
+import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
 
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
@@ -65,7 +65,7 @@ export class BareRequest {
     }
   }
 
-  readBody() {
+  private readBody() {
     if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!))
       return new Promise<void>((resolve, reject) => {
         const temp: any = [];
@@ -79,28 +79,15 @@ export class BareRequest {
       });
   }
 
-  _attachCookieManager(opts?: CookieManagerOptions) {
+  private attachCookieManager(opts?: CookieManagerOptions) {
     this.cm = new CookieManager(opts, this);
   }
 
-  _populateCookies(cookies?: { [cookie: string]: string }) {
-    if (!cookies) return;
-    this.cookies = cookies;
+  private populateCookies() {
+    this.cookies = this.cm?.parseCookie(this._originalRequest.headers.cookie) || {};
   }
 
-  getHeader(header: string) {
-    return this.headers[header];
-  }
-
-  getCookie(cookie: string) {
-    return this.cookies[cookie];
-  }
-
-  getCookies() {
-    return { ...this.cookies };
-  }
-
-  classifyRequestBody(data: Buffer[]) {
+  private classifyRequestBody(data: Buffer[]) {
     const wholeChunk = Buffer.concat(data);
     switch (this.contentType) {
       case 'text/plain':
@@ -121,7 +108,7 @@ export class BareRequest {
     }
   }
 
-  setRemoteClient(remoteClient: string) {
+  private setRemoteClient(remoteClient: string) {
     this.remoteClient = remoteClient;
   }
 
@@ -138,8 +125,22 @@ export class BareRequest {
     });
   }
 
-  setTimeFormat(format: 's' | 'ms') {
+  private setTimeFormat(format: 's' | 'ms') {
     this.countTimeFormat = format;
+  }
+
+  // ======== PUBLIC APIS ========
+
+  getHeader(header: string) {
+    return this.headers[header];
+  }
+
+  getCookie(cookie: string) {
+    return this.cookies[cookie];
+  }
+
+  getCookies() {
+    return { ...this.cookies };
   }
 
   disableCache() {

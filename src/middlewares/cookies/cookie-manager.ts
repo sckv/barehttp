@@ -2,8 +2,9 @@ import cookie from 'cookie';
 
 import { secretsOperator } from './signer';
 
-import { BareRequest } from '../../request';
 import { logMe } from '../../logger';
+
+import type { BareRequest } from '../../request';
 
 export type CookieManagerOptions = cookie.CookieSerializeOptions & {
   signed?: boolean;
@@ -37,10 +38,10 @@ export class CookieManager {
     }
 
     const serialized = cookie.serialize(name, value, opts);
-    let setCookie = this.flow.getHeader('set-cookie');
+    let setCookie = this.flow.getHeader('Set-Cookie');
 
     if (!setCookie) {
-      this.flow.setHeader('set-cookie', serialized);
+      this.flow.setHeader('Set-Cookie', serialized);
       return;
     }
 
@@ -49,7 +50,7 @@ export class CookieManager {
     }
 
     setCookie.push(serialized);
-    this.flow.setHeader('set-cookie', setCookie);
+    this.flow.setHeader('Set-Cookie', setCookie);
   }
 
   clearCookie(name: string, options: CookieManagerOptions = {}) {
@@ -64,13 +65,15 @@ export class CookieManager {
     return this.setCookie(name, '', opts);
   }
 
-  parseCookie(rawCookie?: string) {
-    if (!rawCookie) return;
-    return cookie.parse(rawCookie, this.options.parseOptions);
-  }
-
-  middleware(flow: BareRequest) {
-    flow._populateCookies(this.parseCookie(flow._originalRequest.headers.cookie));
+  parseCookie(rawCookie?: string): { [k: string]: string } {
+    if (!rawCookie) return {};
+    const result = {};
+    const values = rawCookie?.split(';');
+    for (let i = 0; i < values.length - 1; i++) {
+      const split = values[i].trim().split('=');
+      if (split.length == 2) result[split[0]] = split[1];
+    }
+    return result;
   }
 
   unsignCookie(value) {
