@@ -1,6 +1,6 @@
 # barehttp
 
-Full-featured slim webserver for microservices with extremely low overhead and production features
+Full-featured slim webserver for microservices with extremely low overhead and ready for production
 
 [![Known Vulnerabilities](https://snyk.io/test/github/sckv/bare-http/badge.svg)](https://snyk.io/test/github/sckv/bare-http)
 
