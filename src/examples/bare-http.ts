@@ -4,11 +4,15 @@ import { BareServer } from '../server';
 const server = new BareServer({ cookies: true });
 
 // const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
-server.route.get('/route', { disableCache: true }, async function handle(flow) {
-  flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
-  throw new Error('just fail');
-  return 'JUST MESSAGE 2';
-});
+server.route.get(
+  '/route',
+  { cache: { cacheability: 'no-cache', expirationKind: 'max-age' } },
+  async (flow) => {
+    flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
+    // throw new Error('just fail');
+    return 'JUST MESSAGE 2';
+  },
+);
 
 server.route.post('/route', async function routeV1(flow) {
   // logMe.info('message');
