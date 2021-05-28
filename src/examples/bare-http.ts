@@ -1,10 +1,9 @@
-import { logMe } from '../logger';
-import { BareServer } from '../server';
+import { BareHttp, logMe, context } from '../index';
 
-const server = new BareServer({ cookies: true });
+const app = new BareHttp({ cookies: true });
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
-server.route.get({
+app.route.get({
   route: '/route',
   options: { timeout: 2000 },
   handler: async (flow) => {
@@ -15,16 +14,14 @@ server.route.get({
   },
 });
 
-server.route.post({
+app.route.post({
   route: '/route',
   handler: async function routeV1(flow) {
-    // logMe.info('message');
-    // await wait();
     return 'JUST MESSAGE';
   },
 });
 
-server
+app
   .use((flow) => {
     return;
   })
@@ -32,8 +29,8 @@ server
     return;
   });
 
-console.log(server.getRoutes());
+console.log(app.getRoutes());
 
-server.start((address) => {
+app.start((address) => {
   console.log(`BareHttp started at ${address}`);
 });

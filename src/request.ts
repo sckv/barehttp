@@ -171,6 +171,10 @@ export class BareRequest {
     }
   }
 
+  private setParams(params: { [k: string]: string | undefined }) {
+    this.params = params;
+  }
+
   // ======== PUBLIC APIS ========
 
   getHeader(header: string) {
@@ -199,10 +203,6 @@ export class BareRequest {
     if (cacheOpts.revalidation) cacheHeader.push(cacheOpts.revalidation);
 
     if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader.join('; '));
-  }
-
-  setParams(params: { [k: string]: string | undefined }) {
-    this.params = params;
   }
 
   setHeader(header: string, value: string | number | string[] | number[]) {
