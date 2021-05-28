@@ -13,6 +13,26 @@ type Codes<K extends keyof typeof StatusCodes = keyof typeof StatusCodes> = {
   [L in typeof StatusCodes[K]]: typeof StatusPhrases[K];
 };
 
+type Cacheability = 'public' | 'private' | 'no-cache' | 'no-store';
+type ExpirationType =
+  | 'max-age'
+  | 's-maxage'
+  | 'max-stale'
+  | 'min-fresh'
+  | 'stale-while-revalidate'
+  | 'stale-if-error';
+type Revalidation = 'must-revalidate' | 'proxy-revalidate' | 'immutable';
+
+export type CacheOpts = {
+  cacheability: Cacheability;
+  expirationKind: ExpirationType;
+  /**
+   * Default 3600
+   */
+  expirationSeconds?: number;
+  revalidation?: Revalidation;
+};
+
 const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) => {
   acc[status] = StatusPhrases[name];
   return acc;
@@ -129,6 +149,10 @@ export class BareRequest {
     this.countTimeFormat = format;
   }
 
+  private cleanHeader(header: string) {
+    delete this.headers[header];
+  }
+
   // ======== PUBLIC APIS ========
 
   getHeader(header: string) {
@@ -145,6 +169,18 @@ export class BareRequest {
 
   disableCache() {
     this.cache = false;
+  }
+
+  setCache(cacheOpts: CacheOpts) {
+    const cacheHeader: string[] = [];
+    const directive = 'Cache-Control';
+
+    if (cacheOpts.cacheability) cacheHeader.push(cacheOpts.cacheability);
+    if (cacheOpts.expirationKind)
+      cacheHeader.push(`${cacheOpts.expirationKind}=${cacheOpts.expirationSeconds || 3600}`);
+    if (cacheOpts.revalidation) cacheHeader.push(cacheOpts.revalidation);
+
+    if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader.join('; '));
   }
 
   setParams(params: { [k: string]: string | undefined }) {
@@ -189,6 +225,8 @@ export class BareRequest {
       this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
 
     if (!this.cache) this.setHeaders({ Cache: 'no-store', Expire: 0, Pragma: 'no-cache' });
+    if (this.statusToSend >= 400 && this.statusToSend !== 404 && this.statusToSend !== 410)
+      this.cleanHeader('Cache-Control');
 
     this.setRequestTime();
 
