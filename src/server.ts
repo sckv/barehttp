@@ -15,11 +15,18 @@ type Handler = (flow: BareRequest) => any;
 
 type RouteOpts<C> = {
   disableCache?: C extends true ? C : undefined;
-  cache: C extends true ? undefined : CacheOpts;
+  cache?: C extends true ? undefined : CacheOpts;
+  /**
+   * Request timeout handler in `ms`
+   */
+  timeout?: number;
 };
 interface HandlerExposed {
-  <R extends `/${string}`>(route: R, handler: Handler): BareServer<any>;
-  <R extends `/${string}`, C>(route: R, opts: RouteOpts<C>, handler: Handler): BareServer<any>;
+  <R extends `/${string}`, C>(setUp: {
+    route: R;
+    options?: RouteOpts<C>;
+    handler: Handler;
+  }): BareServer<any>;
 }
 
 type ErrorHandler = (err: any, flow: BareRequest) => void;
@@ -58,6 +65,11 @@ type ServerParams<A extends `${number}.${number}.${number}.${number}`> = {
    * Log the resolved reverse DNS first hop for remote ip of the client (first proxy)
    */
   reverseDns?: boolean;
+  /**
+   * Exposes a report with the routes usage.
+   * Default `false`
+   */
+  statisticReport?: boolean;
 };
 
 type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
@@ -91,7 +103,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     this.#middlewares.push(...(params?.middlewares || []));
 
-    this.registerReport();
+    if (params.statisticReport) this.registerReport();
     return this;
   }
 
@@ -194,15 +206,21 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     // apply possible options
     if (opts?.disableCache) flow.disableCache();
     if (opts?.cache) flow.setCache(opts.cache);
+    if (opts?.timeout) flow['attachTimeout'](opts.timeout);
+
+    // populate with route params
     if (routeParams) flow.setParams(routeParams);
 
-    flow._originalRequest.on('close', () => {
-      if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
-        this.#routes.get(encodedRoute)!.success++;
-      } else {
-        this.#routes.get(encodedRoute)!.fails++;
-      }
-    });
+    // attach a statistic reports counter
+    if (this.params.statisticReport) {
+      flow._originalRequest.on('close', () => {
+        if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
+          this.#routes.get(encodedRoute)!.success++;
+        } else {
+          this.#routes.get(encodedRoute)!.fails++;
+        }
+      });
+    }
 
     try {
       const routeReturn = handle.bind(undefined)(flow);
@@ -294,16 +312,14 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
           if (typeof key === 'symbol') return self;
 
           if (Object.keys(HttpMethods).includes(key as string)) {
-            return function (...args: any[]) {
-              let handler,
-                opts = undefined;
-              if (typeof args[1] === 'function') {
-                handler = args[1];
-              } else if (typeof args[2] === 'function') {
-                handler = args[2];
-                opts = args[1];
-              }
-              self.setRoute(HttpMethods[key], args[0], handler, opts);
+            return function (routeSetUp: any) {
+              checkRouteSetUp(routeSetUp, key);
+              self.setRoute(
+                HttpMethods[key],
+                routeSetUp.route,
+                routeSetUp.handler,
+                routeSetUp.options,
+              );
               return self;
             };
           }
@@ -316,5 +332,23 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
         [K in keyof typeof HttpMethods]: HandlerExposed;
       }
     >;
+  }
+}
+
+function checkRouteSetUp(routeSetUp: { [setting: string]: any }, key: string) {
+  if (typeof routeSetUp.route !== 'string') {
+    throw new Error(`A route path for the method ${key} is not a a string`);
+  } else if (routeSetUp.route[0] !== '/') {
+    throw new Error(
+      `A route path should start with '/' for route ${routeSetUp.route} for method ${key}`,
+    );
+  } else if (routeSetUp.route[1] === '/') {
+    throw new Error(
+      `Declared route ${routeSetUp.route} for method ${key} is not correct, review the syntax`,
+    );
+  } else if (typeof routeSetUp.handler !== 'function') {
+    throw new Error(
+      `Handler for the route ${routeSetUp.route} for method ${key} is not a function`,
+    );
   }
 }

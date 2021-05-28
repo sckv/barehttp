@@ -2,7 +2,7 @@ import hyperid from 'hyperid';
 
 import { StatusCodes, StatusPhrases } from './utils/';
 import { JSONParse, JSONStringify } from './utils/safe-json';
-import { logHttp } from './logger';
+import { logHttp, logMe } from './logger';
 import { ContentType } from './utils/content-type';
 import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
 
@@ -38,6 +38,8 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
+const DEFAULT_REQUEST_TIMEOUT = 10000;
+
 export class BareRequest {
   uuid: string;
   params: { [k: string]: string | undefined } = {};
@@ -55,11 +57,12 @@ export class BareRequest {
   private headers: { [header: string]: string | string[] } = {};
   private cookies: { [cooke: string]: string } = {};
   private contentType?: keyof typeof ContentType;
+  private timeout?: NodeJS.Timeout;
 
   constructor(
     public _originalRequest: IncomingMessage,
     public _originalResponse: ServerResponse,
-    logging,
+    logging?: boolean,
   ) {
     this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
     this.remoteIp = _originalRequest.socket.remoteAddress;
@@ -153,6 +156,21 @@ export class BareRequest {
     delete this.headers[header];
   }
 
+  attachTimeout(timeout: number) {
+    if (Number.isFinite(timeout)) {
+      if (this.timeout) clearTimeout(this.timeout);
+      this.timeout = setTimeout(() => {
+        this.status(503);
+        this.send('Server aborted connection by overtime');
+      }, timeout);
+
+      // attach listener to clear the timeout
+      this._originalResponse.on('close', () => this.timeout && clearTimeout(this.timeout));
+    } else {
+      console.log(`Only numeric values are valid per route timeout, submitted ${timeout}`);
+    }
+  }
+
   // ======== PUBLIC APIS ========
 
   getHeader(header: string) {
@@ -219,12 +237,15 @@ export class BareRequest {
 
   send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
     if (this._originalResponse.socket?.destroyed) return;
+    if (this._originalResponse.headersSent) return;
 
     // work basic headers
     if (typeof chunk !== 'undefined' && chunk !== null)
       this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
 
-    if (!this.cache) this.setHeaders({ Cache: 'no-store', Expire: 0, Pragma: 'no-cache' });
+    if (!this.cache)
+      this.setHeaders({ 'Cache-Control': 'no-store', Expire: 0, Pragma: 'no-cache' });
+
     if (this.statusToSend >= 400 && this.statusToSend !== 404 && this.statusToSend !== 410)
       this.cleanHeader('Cache-Control');
 
