@@ -90,7 +90,7 @@ Some of the features are in progress.
 - [x] Routes usage report and endpoint
 - [x] Cache headers handy handling, per route
 - [x] Cookies creation/parsing
-- [ ] Request execution cancellation by timeout
+- [x] Request execution cancellation by timeout
 - [ ] Streaming of chunked multipart response
 - [ ] Safe and fast serialization-deserialization of JSON
 
