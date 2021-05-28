@@ -31,7 +31,7 @@ interface HandlerExposed {
 
 type ErrorHandler = (err: any, flow: BareRequest) => void;
 
-type ServerParams<A extends `${number}.${number}.${number}.${number}`> = {
+type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
   middlewares?: Array<Middleware>;
   serverPort?: number;
   /**
@@ -95,36 +95,45 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
   #runMiddlewaresSequence: (flow: BareRequest) => void = (_) => _;
 
-  constructor(private params: ServerParams<A> = {}) {
-    if (params.context) enableContext();
-
+  constructor(private bareOptions: BareOptions<A> = {}) {
+    // init
     this.server = createServer(this.#listener.bind(this));
-    this.#errorHandler = params?.errorHandlerMiddleware || this.basicErrorHandler;
+    this.attachGracefulHandlers();
 
-    this.#middlewares.push(...(params?.middlewares || []));
+    // context setting
+    if (bareOptions.context) enableContext();
 
-    if (params.statisticReport) this.registerReport();
+    // middlewares settings
+    this.#errorHandler = bareOptions?.errorHandlerMiddleware || this.basicErrorHandler;
+    this.#middlewares.push(...(bareOptions?.middlewares || []));
+    if (bareOptions.statisticReport) this.registerReport();
+
     return this;
   }
 
   #listener = (request: IncomingMessage, response: ServerResponse) => {
-    const { requestTimeFormat, logging } = this.params;
+    const { requestTimeFormat, logging } = this.bareOptions;
 
     const flow = new BareRequest(request, response, logging);
 
-    newContext('request');
-    context.current?.store.set('id', flow.uuid);
+    // init and attach request uuid to the context
+    if (this.bareOptions.context) {
+      newContext('request');
+      context.current?.store.set('id', flow.uuid);
+    }
 
     if (requestTimeFormat) flow['setTimeFormat'](requestTimeFormat);
 
-    request.on('close', () => this.#flows.delete(flow.uuid)); // remove already finished flow from the memory
+    // listener to remove already finished flow from the memory storage
+    request.on('close', () => this.#flows.delete(flow.uuid));
 
+    // attach a flow to the flow memory storage
     this.#flows.set(flow.uuid, flow);
     this.applyMiddlewares(flow.uuid);
   };
 
   /**
-   * This function generates defined middlewares for the sequential execution
+   * This function generates previously defined middlewares for the sequential execution
    */
   #writeMiddlewares = () => {
     const lines: string[] = [];
@@ -146,22 +155,30 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   };
 
   private async applyMiddlewares(flowId: string) {
-    const flow = this.#flows.get(flowId)!;
+    const flow = this.#flows.get(flowId);
+    if (!flow) {
+      throw new Error(`No flow been found for id ${flowId}, theres a sync mistake in the server.`);
+    }
+
+    // invoke body stream consumption
     await flow['readBody']();
 
-    // attach special cookies middleware
-    if (this.params.cookies) {
-      flow['attachCookieManager'](this.params.cookiesOptions);
+    // attach cookies middleware
+    if (this.bareOptions.cookies) {
+      flow['attachCookieManager'](this.bareOptions.cookiesOptions);
       flow['populateCookies']();
     }
 
     // to test in cloud provider
-    if (this.params.reverseDns) {
+    // this should resolve the name of the first hop from the dns chain
+    if (this.bareOptions.reverseDns) {
       const remoteClient = await dns.promises.reverse(flow.remoteIp!);
       flow['setRemoteClient'](remoteClient[0]);
     }
 
     if (this.#middlewares.length) await this.#runMiddlewaresSequence(flow);
+
+    // now route the request
     this.#router.lookup(flow._originalRequest, flow._originalResponse);
   }
 
@@ -203,16 +220,16 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   ) {
     const flow = this.#flows.get((req as any).id)!;
 
-    // apply possible options
+    // apply possible route options
     if (opts?.disableCache) flow.disableCache();
     if (opts?.cache) flow.setCache(opts.cache);
     if (opts?.timeout) flow['attachTimeout'](opts.timeout);
 
     // populate with route params
-    if (routeParams) flow.setParams(routeParams);
+    if (routeParams) flow['setParams'](routeParams);
 
-    // attach a statistic reports counter
-    if (this.params.statisticReport) {
+    // attach a gneral statistic reports counter
+    if (this.bareOptions.statisticReport) {
       flow._originalRequest.on('close', () => {
         if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
           this.#routes.get(encodedRoute)!.success++;
@@ -237,7 +254,6 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   private soundRouteReturn(response: any, flow: BareRequest) {
-    if (flow._originalResponse.headersSent) return;
     if (!response) flow.send();
 
     switch (response.constructor) {
@@ -269,13 +285,33 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     flow.json({ ...e, message: e.message, stack: e.stack });
   }
 
+  private attachGracefulHandlers() {
+    const graceful = async (code = 0) => {
+      await this.stop();
+      process.exit(code);
+    };
+
+    // Stop graceful
+    process.on('uncaughtException', (err) => {
+      console.error(err);
+      graceful(1);
+    });
+
+    process.on('unhandledRejection', (err) => {
+      console.error(err);
+    });
+
+    process.on('SIGTERM', graceful);
+    process.on('SIGINT', graceful);
+  }
+
   // ========= PUBLIC APIS ==========
 
   start(cb?: (address: string) => void) {
     this.#writeMiddlewares();
 
-    const port = this.params?.serverPort || process.env.PORT || 3000;
-    const address = this.params?.serverAddress || '0.0.0.0';
+    const port = this.bareOptions?.serverPort || process.env.PORT || 3000;
+    const address = this.bareOptions?.serverAddress || '0.0.0.0';
 
     // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
     this.server.listen(+port, address, undefined, () =>
@@ -284,7 +320,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   stop(cb?: (e?: Error) => void) {
-    for (const flow of Object.values(this.#flows)) {
+    for (const flow of this.#flows.values()) {
       if (!flow._originalResponse.headersSent) {
         flow.status(500);
         flow.send('Server terminated');
