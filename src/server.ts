@@ -1,10 +1,10 @@
 import Router from 'find-my-way';
 
-import { BareRequest } from './request';
+import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 import { generateReport } from './report';
-import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
+import { CookieManagerOptions } from './middlewares/cookies/cookie-manager';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -13,9 +13,13 @@ import { Writable } from 'stream';
 type Middleware = (flow: BareRequest) => Promise<void> | void;
 type Handler = (flow: BareRequest) => any;
 
+type RouteOpts<C> = {
+  disableCache?: C extends true ? C : undefined;
+  cache: C extends true ? undefined : CacheOpts;
+};
 interface HandlerExposed {
   <R extends `/${string}`>(route: R, handler: Handler): BareServer<any>;
-  <R extends `/${string}`>(route: R, opts: RouteOpts, handler: Handler): BareServer<any>;
+  <R extends `/${string}`, C>(route: R, opts: RouteOpts<C>, handler: Handler): BareServer<any>;
 }
 
 type ErrorHandler = (err: any, flow: BareRequest) => void;
@@ -55,9 +59,7 @@ type ServerParams<A extends `${number}.${number}.${number}.${number}`> = {
    */
   reverseDns?: boolean;
 };
-type RouteOpts = {
-  disableCache?: boolean;
-};
+
 type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
 const HttpMethods = {
   get: 'GET',
@@ -163,7 +165,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     }
   }
 
-  private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts) {
+  private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts<any>) {
     const encode = this.encodeRoute(method, route);
     this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
 
@@ -185,12 +187,13 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     routeParams: { [k: string]: string | undefined },
     handle: Handler,
     encodedRoute: string,
-    opts?: RouteOpts,
+    opts?: RouteOpts<any>,
   ) {
     const flow = this.#flows.get((req as any).id)!;
 
     // apply possible options
     if (opts?.disableCache) flow.disableCache();
+    if (opts?.cache) flow.setCache(opts.cache);
     if (routeParams) flow.setParams(routeParams);
 
     flow._originalRequest.on('close', () => {
