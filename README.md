@@ -88,7 +88,7 @@ Some of the features are in progress.
 - [x] Promised or conventional middlewares
 - [x] Logging and serialized with `pino`
 - [x] Routes usage report and endpoint
-- [ ] Cache headers handy handling, per route
+- [x] Cache headers handy handling, per route
 - [x] Cookies creation/parsing
 - [ ] Request execution cancellation by timeout
 - [ ] Streaming of chunked multipart response
