@@ -5,16 +5,27 @@ const app = new BareHttp({ cookies: true });
 interface Ok {
   haha: number;
 }
+
+type Cool = { okey?: boolean };
+
+type Generic<G extends boolean = boolean> = { prop: G };
 type SomeReturning = {
   fine: string;
-  coolData: number;
-  kek?: Ok;
+  justNullable?: number;
+  justArray: string[];
+  generical?: Generic | number | Ok[];
+  justUnionArray?: (string | number)[];
+  otherUnion: number | boolean;
+  coolData: number | string | 'dasdas' | Ok | null;
+  kek?: Ok & Cool;
 };
 
 const returning: SomeReturning = {
   fine: 'fine',
   coolData: 1123,
   kek: { haha: 123123 },
+  otherUnion: 1233232,
+  generical: { prop: false },
 };
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
@@ -24,7 +35,9 @@ app.route.get({
   handler: async function (flow) {
     flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
     await wait();
-    // throw new Error('just fail');
+    if (flow.remoteIp) {
+      return { special: 'return' };
+    }
     return returning;
   },
 });
