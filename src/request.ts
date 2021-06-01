@@ -38,8 +38,6 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-const DEFAULT_REQUEST_TIMEOUT = 10000;
-
 export class BareRequest {
   uuid: string;
   params: { [k: string]: string | undefined } = {};
