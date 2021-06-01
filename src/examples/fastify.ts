@@ -1,12 +1,9 @@
-import { uuidv4 } from '../utils';
-
 const fastify = require('fastify')({
   logger: true,
 });
 
 // Declare a route
 fastify.get('/route', function (request, reply) {
-  reply.header('X-Request-Id', uuidv4());
   reply.send('JUST RESPONSE');
 });
 

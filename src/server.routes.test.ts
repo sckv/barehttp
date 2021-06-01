@@ -55,3 +55,17 @@ test('Returns from the route with `return` keyword', async () => {
   const response = await axios.get(`http://localhost:${TEST_PORT}/test2`);
   expect(response.data).toBe('ALL_OK');
 });
+
+test("Server doesn't start if timeout is not correct", async () => {
+  const app = new BareServer();
+
+  expect(() =>
+    app.route.post({
+      route: '/test',
+      options: { timeout: 'some timeout' as any },
+      handler: async () => {
+        return 'ok';
+      },
+    }),
+  ).toThrow('Only numeric values are valid per-route timeout, submitted');
+});
