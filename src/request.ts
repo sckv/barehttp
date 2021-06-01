@@ -6,6 +6,8 @@ import { logHttp, logMe } from './logger';
 import { ContentType } from './utils/content-type';
 import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
 
+import { types } from 'util';
+
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
 
@@ -46,6 +48,7 @@ export class BareRequest {
   requestHeaders: { [key: string]: any };
   statusToSend = 200;
   cm?: CookieManager;
+  sent = false;
 
   private cache = true;
   private startTime: [seconds: number, nanoseconds: number];
@@ -93,7 +96,9 @@ export class BareRequest {
         this._originalRequest
           .on('data', (chunk) => temp.push(chunk))
           .on('end', () => {
-            this.requestBody = this.classifyRequestBody(temp);
+            const parsed = this.classifyRequestBody(temp);
+            if (types.isNativeError(parsed)) reject(parsed);
+            this.requestBody = parsed;
             resolve();
           })
           .on('error', reject);
@@ -125,7 +130,7 @@ export class BareRequest {
 
         return store;
       default:
-        return Buffer.concat(data);
+        return wholeChunk;
     }
   }
 
@@ -154,19 +159,15 @@ export class BareRequest {
     delete this.headers[header];
   }
 
-  attachTimeout(timeout: number) {
-    if (Number.isFinite(timeout)) {
-      if (this.timeout) clearTimeout(this.timeout);
-      this.timeout = setTimeout(() => {
-        this.status(503);
-        this.send('Server aborted connection by overtime');
-      }, timeout);
+  private attachTimeout(timeout: number) {
+    if (this.timeout) clearTimeout(this.timeout);
+    this.timeout = setTimeout(() => {
+      this.status(503);
+      this.send('Server aborted connection by overtime');
+    }, timeout);
 
-      // attach listener to clear the timeout
-      this._originalResponse.on('close', () => this.timeout && clearTimeout(this.timeout));
-    } else {
-      console.log(`Only numeric values are valid per route timeout, submitted ${timeout}`);
-    }
+    // attach listener to clear the timeout
+    this._originalResponse.on('close', () => this.timeout && clearTimeout(this.timeout));
   }
 
   private setParams(params: { [k: string]: string | undefined }) {
@@ -197,7 +198,7 @@ export class BareRequest {
 
     if (cacheOpts.cacheability) cacheHeader.push(cacheOpts.cacheability);
     if (cacheOpts.expirationKind)
-      cacheHeader.push(`${cacheOpts.expirationKind}=${cacheOpts.expirationSeconds || 3600}`);
+      cacheHeader.push(`${cacheOpts.expirationKind}=${cacheOpts.expirationSeconds ?? 3600}`);
     if (cacheOpts.revalidation) cacheHeader.push(cacheOpts.revalidation);
 
     if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader.join('; '));
@@ -234,8 +235,24 @@ export class BareRequest {
   }
 
   send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
-    if (this._originalResponse.socket?.destroyed) return;
-    if (this._originalResponse.headersSent) return;
+    if (this._originalResponse.socket?.destroyed) {
+      logMe.error("Tying to send into closed client's stream");
+      return;
+    }
+    if (this._originalResponse.headersSent) {
+      logMe.error('Tying to send with the headers already sent');
+      return;
+    }
+
+    this.sent = true;
+
+    let toSend = chunk;
+    switch (chunk?.constructor) {
+      case Uint16Array:
+      case Uint8Array:
+      case Uint32Array:
+        toSend = Buffer.from((chunk as any).buffer);
+    }
 
     // work basic headers
     if (typeof chunk !== 'undefined' && chunk !== null)
@@ -255,6 +272,6 @@ export class BareRequest {
       statusTuples[this.statusToSend],
       this.headers,
     );
-    this._originalResponse.end(chunk);
+    this._originalResponse.end(toSend);
   }
 }

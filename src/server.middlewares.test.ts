@@ -16,9 +16,11 @@ test('Starts the server', async () => {
 
   expect(console.log).toHaveBeenCalledWith('started');
   expect(app.server.listening).toBeTruthy();
+  await app.stop();
 });
 
 test('Shut downs the server', async () => {
+  await app.start();
   await app.stop(() => console.log('stopped'));
 
   expect(console.log).toHaveBeenCalledWith('stopped');
@@ -38,6 +40,34 @@ test('Registers a middleware through middlewares settings array', async () => {
   expect(testApp.getMiddlewares()).toHaveLength(1);
 });
 
+test('Uses middleware', async () => {
+  const testApp = new BareServer();
+
+  testApp.use((flow) => {
+    flow.sendStatus(200);
+  });
+
+  await testApp.start();
+  await expect(axios.get(`http://localhost:3000`)).resolves.toMatchObject({
+    status: 200,
+  });
+  await testApp.stop();
+});
+
+test('Uses promise middleware', async () => {
+  const testApp = new BareServer();
+
+  testApp.use(async (flow) => {
+    flow.sendStatus(200);
+  });
+
+  await testApp.start();
+  await expect(axios.get(`http://localhost:3000`)).resolves.toMatchObject({
+    status: 200,
+  });
+  await testApp.stop();
+});
+
 test('Fails inside middleware and calls to integrated error handler', async () => {
   const err = new Error('error');
 
@@ -47,6 +77,7 @@ test('Fails inside middleware and calls to integrated error handler', async () =
 
   await app.start();
   await expect(() => axios.get(`http://localhost:${TEST_PORT}`)).rejects.toThrow();
+  await app.stop();
 });
 
 test('Fails inside middleware and calls to custom error handler', async () => {
@@ -54,7 +85,9 @@ test('Fails inside middleware and calls to custom error handler', async () => {
 
   app.setCustomErrorHandler(spyEh);
 
+  await app.start();
   await expect(() => axios.get(`http://localhost:${TEST_PORT}`)).rejects.toThrow();
+  await app.stop();
 
   expect(spyEh).toHaveBeenCalled();
 });
