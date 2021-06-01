@@ -314,8 +314,11 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     const address = this.bareOptions?.serverAddress || '0.0.0.0';
 
     // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
-    this.server.listen(+port, address, undefined, () =>
-      cb ? cb(`http://localhost:${port}`) : void 0,
+    return new Promise<void>((res) =>
+      this.server.listen(+port, address, undefined, () => {
+        cb ? cb(`http://0.0.0.0:${port}`) : void 0;
+        res();
+      }),
     );
   }
 
@@ -326,12 +329,30 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
         flow.send('Server terminated');
       }
     }
-    this.server?.close(cb);
+    return new Promise<void>((res, rej) => {
+      this.server?.close((e) => {
+        if (e) {
+          rej(e);
+          cb?.(e);
+        } else {
+          cb?.();
+          res();
+        }
+      });
+    });
   }
 
   use(middleware: Middleware) {
     this.#middlewares.push(middleware);
     return this;
+  }
+
+  getMiddlewares(): Middleware[] {
+    return this.#middlewares;
+  }
+
+  setCustomErrorHandler(eh: ErrorHandler) {
+    this.#errorHandler = eh;
   }
 
   getRoutes() {
