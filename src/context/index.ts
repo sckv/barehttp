@@ -55,7 +55,7 @@ const hook = asyncHooks.createHook({
 
 const enableContext = () => {
   context.enabled = true;
-  hook.enable();
+  return hook.enable();
 };
 
 export { context, newContext, enableContext };

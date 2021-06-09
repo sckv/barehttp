@@ -56,11 +56,12 @@ export const logHttp = (...params: Parameters<typeof serializeHttp>) => {
   logger[level](logObject);
 };
 
+// TODO: remove the test condition
 export const logMe: LogMe = {
-  debug: (...args) => logger.debug(serializeLog(...args)),
-  info: (...args) => logger.info(serializeLog(...args)),
-  warn: (...args) => logger.warn(serializeLog(...args)),
-  error: (...args) => logger.error(serializeLog(...args)),
-  fatal: (...args) => logger.fatal(serializeLog(...args)),
-  trace: (...args) => logger.trace(serializeLog(...args)),
+  debug: (...args) => !envs.isTest && logger.debug(serializeLog(...args)),
+  info: (...args) => !envs.isTest && logger.info(serializeLog(...args)),
+  warn: (...args) => !envs.isTest && logger.warn(serializeLog(...args)),
+  error: (...args) => !envs.isTest && logger.error(serializeLog(...args)),
+  fatal: (...args) => !envs.isTest && logger.fatal(serializeLog(...args)),
+  trace: (...args) => !envs.isTest && logger.trace(serializeLog(...args)),
 };

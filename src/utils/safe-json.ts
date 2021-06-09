@@ -12,6 +12,6 @@ export const JSONParse = (data: any) => {
     return JSON.parse(data);
   } catch (e) {
     console.log('Error parsing, data not deserializable', e);
-    return null;
+    return e;
   }
 };
