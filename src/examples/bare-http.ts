@@ -9,7 +9,6 @@ app.route.get({
   handler: async (flow) => {
     flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
     await wait();
-    // throw new Error('just fail');
     return 'JUST MESSAGE 2';
   },
 });
@@ -22,10 +21,10 @@ app.route.post({
 });
 
 app
-  .use((flow) => {
+  .use(() => {
     return;
   })
-  .use(async (flow) => {
+  .use(async () => {
     return;
   });
 
