@@ -5,6 +5,7 @@ import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 import { generateReport } from './report';
 import { CookieManagerOptions } from './middlewares/cookies/cookie-manager';
+import { StatusCodes } from './utils';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -29,7 +30,11 @@ interface HandlerExposed {
   }): BareServer<any>;
 }
 
-type ErrorHandler = (err: any, flow: BareRequest) => void;
+type ErrorHandler = (
+  err: any,
+  flow: BareRequest,
+  status?: typeof StatusCodes[keyof typeof StatusCodes],
+) => void;
 
 type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
   middlewares?: Array<Middleware>;
@@ -129,7 +134,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     // attach a flow to the flow memory storage
     this.#flows.set(flow.uuid, flow);
-    this.applyMiddlewares(flow.uuid);
+    this.applyMiddlewares(flow.uuid).catch((e) => this.#errorHandler(e, flow, 400));
   };
 
   /**
@@ -144,6 +149,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     if (maxOrder > 0) {
       while (order <= maxOrder - 1) {
+        lines.push(`if (flow.sent) return;`);
         lines.push(`await this.resolveMiddleware(${order}, flow);`);
         order++;
       }
@@ -157,7 +163,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   private async applyMiddlewares(flowId: string) {
     const flow = this.#flows.get(flowId);
     if (!flow) {
-      throw new Error(`No flow been found for id ${flowId}, theres a sync mistake in the server.`);
+      throw new Error(`No flow been found for id ${flowId}, theres a sync mistake in the server.`); // should NEVER happen
     }
 
     // invoke body stream consumption
@@ -178,8 +184,10 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     if (this.#middlewares.length) await this.#runMiddlewaresSequence(flow);
 
-    // now route the request
-    this.#router.lookup(flow._originalRequest, flow._originalResponse);
+    // now route the request if middlewares did not send the response back
+    if (!flow.sent) {
+      this.#router.lookup(flow._originalRequest, flow._originalResponse);
+    }
   }
 
   /**
@@ -200,7 +208,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     this.#router.on(method, route, (req, _, routeParams) => {
       this.#routes.get(encode)!.hits++;
-      this.handleRoute(req, routeParams, handler, encode, opts);
+      this.handleRoute(req, checkParams(routeParams), handler, encode, opts);
     });
   }
 
@@ -228,7 +236,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     // populate with route params
     if (routeParams) flow['setParams'](routeParams);
 
-    // attach a gneral statistic reports counter
+    // attach a general statistic reports counter
     if (this.bareOptions.statisticReport) {
       flow._originalRequest.on('close', () => {
         if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
@@ -260,15 +268,17 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
       case Uint8Array:
       case Uint16Array:
       case Uint32Array:
-      case ArrayBuffer:
       case Buffer:
-      case Number:
+      case String:
         flow.send(response);
         break;
+      case Boolean:
+      case Number:
+        flow.send('' + response);
       case Writable:
         flow.stream(response);
         break;
-      case String:
+      case Object:
         flow.json(response);
         break;
       default:
@@ -280,8 +290,12 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     return `${method} ${route}`;
   }
 
-  private basicErrorHandler(e: any, flow: BareRequest) {
-    flow.status(500);
+  private basicErrorHandler(
+    e: any,
+    flow: BareRequest,
+    status?: typeof StatusCodes[keyof typeof StatusCodes],
+  ) {
+    flow.status(status ?? 500);
     flow.json({ ...e, message: e.message, stack: e.stack });
   }
 
@@ -314,24 +328,45 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     const address = this.bareOptions?.serverAddress || '0.0.0.0';
 
     // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
-    this.server.listen(+port, address, undefined, () =>
-      cb ? cb(`http://localhost:${port}`) : void 0,
+    return new Promise<void>((res) =>
+      this.server.listen(+port, address, undefined, () => {
+        cb ? cb(`http://0.0.0.0:${port}`) : void 0;
+        res();
+      }),
     );
   }
 
   stop(cb?: (e?: Error) => void) {
     for (const flow of this.#flows.values()) {
-      if (!flow._originalResponse.headersSent) {
+      if (!flow.sent) {
         flow.status(500);
         flow.send('Server terminated');
       }
     }
-    this.server?.close(cb);
+    return new Promise<void>((res, rej) => {
+      this.server?.close((e) => {
+        if (e) {
+          rej(e);
+          cb?.(e);
+        } else {
+          cb?.();
+          res();
+        }
+      });
+    });
   }
 
   use(middleware: Middleware) {
     this.#middlewares.push(middleware);
     return this;
+  }
+
+  getMiddlewares(): Middleware[] {
+    return this.#middlewares;
+  }
+
+  setCustomErrorHandler(eh: ErrorHandler) {
+    this.#errorHandler = eh;
   }
 
   getRoutes() {
@@ -373,18 +408,42 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
 function checkRouteSetUp(routeSetUp: { [setting: string]: any }, key: string) {
   if (typeof routeSetUp.route !== 'string') {
-    throw new Error(`A route path for the method ${key} is not a a string`);
+    throw new TypeError(`A route path for the method ${key} is not a a string`);
   } else if (routeSetUp.route[0] !== '/') {
-    throw new Error(
+    throw new SyntaxError(
       `A route path should start with '/' for route ${routeSetUp.route} for method ${key}`,
     );
   } else if (routeSetUp.route[1] === '/') {
-    throw new Error(
+    throw new SyntaxError(
       `Declared route ${routeSetUp.route} for method ${key} is not correct, review the syntax`,
     );
   } else if (typeof routeSetUp.handler !== 'function') {
-    throw new Error(
+    throw new TypeError(
       `Handler for the route ${routeSetUp.route} for method ${key} is not a function`,
     );
+  } else if (
+    routeSetUp.options?.timeout &&
+    typeof routeSetUp.options.timeout !== 'number' &&
+    !Number.isFinite(routeSetUp.options.timeout)
+  ) {
+    throw new TypeError(
+      `Only numeric values are valid per-route timeout, submitted ${routeSetUp.options.timeout}`,
+    );
   }
+}
+
+function checkParams(params: { [param: string]: string | undefined }) {
+  if (!params || Object.keys(params).length === 0) return params;
+  for (const [param, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+
+    if (/(\.\/)(\.\.)(\\.)/.test(decodeURI(value))) {
+      logMe.warn(
+        `Param ${param} value ${value} was redacted because contained dangerous characters`,
+      );
+      param[param] = 'REDACTED';
+    }
+  }
+
+  return params;
 }
