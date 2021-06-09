@@ -7,9 +7,13 @@
     "lib": "lib",
     "test": "__tests__"
   },
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "build": "rm -rf ./lib && tsc",
-    "test": "jest --runInBand --coverage"
+    "test": "jest --runInBand --coverage",
+    "release": "semantic-release"
   },
   "keywords": [
     "nodejs",
