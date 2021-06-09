@@ -275,7 +275,7 @@ Some of the features are in progress.
 
 ## Benchmarks
 
-WIP
+(coming soon)
 
 ## Support
 
