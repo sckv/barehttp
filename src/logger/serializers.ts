@@ -95,7 +95,7 @@ export function serializeHttp(
       request: {
         headers: req.headers,
         http_version: req.httpVersion,
-        id: req.headers['x-request-id'] || 'unknown',
+        id: req.headers['x-request-id'] || (req as any).id || 'unknown',
         method: req.method,
         url: req.url,
       },

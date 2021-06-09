@@ -47,14 +47,15 @@ yarn add barehttp
 ### Basic
 
 ```typescript
-import { BareServer, logMe } from 'barehttp';
+import { BareHttp, logMe } from 'barehttp';
 
-const app = new BareServer({ logging: false });
+const app = new BareHttp({ logging: false });
 
 app.route.get({
   route: '/route',
   handler: function routeV1(flow) {
     flow.json({ everythings: 'OK' });
+  })
 });
 
 
@@ -78,9 +79,9 @@ app.start((address) => {
 ### async-await
 
 ```typescript
-import { BareServer, logMe } from 'barehttp';
+import { BareHttp, logMe } from 'barehttp';
 
-const app = new BareServer({ logging: false });
+const app = new BareHttp({ logging: false });
 
 app.route.get('/route', async function routeV1() {
   return { promised: 'data' };

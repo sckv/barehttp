@@ -262,6 +262,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   private soundRouteReturn(response: any, flow: BareRequest) {
+    if (flow.sent) return;
     if (!response) flow.send();
 
     switch (response.constructor) {
