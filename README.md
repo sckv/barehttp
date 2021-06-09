@@ -272,8 +272,6 @@ Some of the features are in progress.
 - [x] Cache headers handy handling, per route
 - [x] Cookies creation/parsing
 - [x] Request execution cancellation by timeout
-- [ ] Streaming of chunked multipart response
-- [ ] Safe and fast serialization-deserialization of JSON
 
 ## Benchmarks
 
