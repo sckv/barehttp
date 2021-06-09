@@ -90,7 +90,7 @@ app.route.get('/route', async function routeV1() {
 // Define a middleware
 app.use(async (flow) => {
   logMe.info('my middleware');
-  await someAuthentication();
+  await someAuthenticationFlow();
 });
 
 app.start((address) => {
