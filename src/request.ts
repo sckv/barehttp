@@ -240,7 +240,7 @@ export class BareRequest {
       return;
     }
     if (this._originalResponse.headersSent) {
-      logMe.error('Tying to send with the headers already sent');
+      logMe.error('Trying to send with the headers already sent');
       return;
     }
 

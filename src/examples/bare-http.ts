@@ -1,6 +1,6 @@
 import { BareHttp, logMe, context } from '../index';
 
-const app = new BareHttp({ cookies: true });
+const app = new BareHttp({ logging: true });
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 app.route.get({
