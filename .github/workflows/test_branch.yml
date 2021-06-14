@@ -2,7 +2,7 @@ name: Test branch or PR
 on:
   push:
     branches:
-      - '**'
+      - '!master'
 jobs:
   testlint:
     name: Test and Lint
