@@ -70,7 +70,7 @@ test('Sets cache headers for private; max-age=3800; must-revalidate', () => {
     revalidation: 'must-revalidate',
   });
 
-  expect(request.getHeader('Cache-Control')).toBe('private; max-age=3800; must-revalidate');
+  expect(request.getHeader('Cache-Control')).toBe('private, max-age=3800, must-revalidate');
 });
 
 test('Sets cache headers for no-store; max-age=0; must-revalidate', () => {
@@ -82,7 +82,7 @@ test('Sets cache headers for no-store; max-age=0; must-revalidate', () => {
     revalidation: 'must-revalidate',
   });
 
-  expect(request.getHeader('Cache-Control')).toBe('no-store; max-age=0; must-revalidate');
+  expect(request.getHeader('Cache-Control')).toBe('no-store, max-age=0, must-revalidate');
 });
 
 test('Sets response header', () => {
