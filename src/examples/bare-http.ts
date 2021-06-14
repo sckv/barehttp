@@ -1,4 +1,4 @@
-import { BareHttp, logMe, context } from '../index';
+import { BareHttp } from '../index';
 
 const app = new BareHttp({ logging: true });
 
@@ -15,7 +15,7 @@ app.route.get({
 
 app.route.post({
   route: '/route',
-  handler: async function routeV1(flow) {
+  handler: async function routeV1() {
     return 'JUST MESSAGE';
   },
 });
