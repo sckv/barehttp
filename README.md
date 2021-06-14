@@ -83,8 +83,11 @@ import { BareHttp, logMe } from 'barehttp';
 
 const app = new BareHttp({ logging: false });
 
-app.route.get('/route', async function routeV1() {
-  return { promised: 'data' };
+app.route.get({
+  route:'/route',
+  handler: async function routeV1() {
+    return { promised: 'data' };
+  })
 });
 
 // Define a middleware
