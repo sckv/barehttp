@@ -201,7 +201,7 @@ export class BareRequest {
       cacheHeader.push(`${cacheOpts.expirationKind}=${cacheOpts.expirationSeconds ?? 3600}`);
     if (cacheOpts.revalidation) cacheHeader.push(cacheOpts.revalidation);
 
-    if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader.join('; '));
+    if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader.join(', '));
   }
 
   setHeader(header: string, value: string | number | string[] | number[]) {
