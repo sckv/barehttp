@@ -23,7 +23,7 @@ test('Statistics report sum up with a route hit', async () => {
   const { data } = await axios.get('http://localhost:3000/_report');
   await app.stop();
 
-  expect(data).toContain('<td>GET /_report</td><td>2</td>');
+  expect(data).toContain('<td>GET?/_report</td><td>2</td>');
 });
 
 test('Statistics report sum up with a route fail hit', async () => {
@@ -43,7 +43,7 @@ test('Statistics report sum up with a route fail hit', async () => {
   const { data } = await axios.get('http://localhost:3000/_report');
   await app.stop();
 
-  expect(data).toContain('<td>GET /test</td><td>1</td><td>0</td><td>1</td>');
+  expect(data).toContain('<td>GET?/test</td><td>1</td><td>0</td><td>1</td>');
 });
 
 test('Enables context in the settings', async () => {
