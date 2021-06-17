@@ -20,7 +20,7 @@ test('Registers a route with a handler', () => {
     handler: () => {},
   });
 
-  expect(app.getRoutes().includes('GET /route')).toBeTruthy();
+  expect(app.getRoutes().includes('GET?/route')).toBeTruthy();
 });
 
 test('Registers a route with options', () => {
@@ -30,7 +30,7 @@ test('Registers a route with options', () => {
     options: { disableCache: true, timeout: 2000 },
   });
 
-  expect(app.getRoutes().includes('POST /route_settings')).toBeTruthy();
+  expect(app.getRoutes().includes('POST?/route_settings')).toBeTruthy();
 });
 
 test('Fails if theres an error throw inside route handler', async () => {
