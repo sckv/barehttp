@@ -94,6 +94,8 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   server: Server;
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
+  #routesLib: Map<string, any> = new Map();
+
   #router = Router({ ignoreTrailingSlash: true });
   #flows: Map<string, BareRequest> = new Map();
   #errorHandler: ErrorHandler;
@@ -206,9 +208,38 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     const encode = this.encodeRoute(method, route);
     this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
 
-    this.#router.on(method, route, (req, _, routeParams) => {
+    const handleFn = (req, _, routeParams) => {
+      this.#routes.get(encode)!.hits++;
+
+      this.handleRoute(req, checkParams(routeParams), handler, encode, opts);
+    };
+
+    this.#routesLib.set(encode, handleFn);
+
+    this.#router.on(method, route, handleFn);
+  }
+
+  private setRuntimeRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts<any>) {
+    const encode = this.encodeRoute(method, route);
+    this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
+
+    if (this.#routesLib.get(encode)) {
+      this.#routesLib.delete(encode);
+    }
+
+    const handleFn = (req, _, routeParams) => {
       this.#routes.get(encode)!.hits++;
       this.handleRoute(req, checkParams(routeParams), handler, encode, opts);
+    };
+
+    this.#routesLib.set(encode, handleFn);
+
+    this.#router.reset();
+
+    this.#routesLib.forEach((handlerFn, route) => {
+      const [m, r] = this.explodeRoute(route);
+
+      this.#router.on(m, r, handlerFn);
     });
   }
 
@@ -288,7 +319,12 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   private encodeRoute(method: string, route: string) {
-    return `${method} ${route}`;
+    if (route.endsWith('/')) route = route.slice(0, -1);
+    return `${method}?${route}`;
+  }
+
+  private explodeRoute(route: string) {
+    return route.split('?') as [method: Methods, route: string];
   }
 
   private basicErrorHandler(
@@ -321,6 +357,44 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   // ========= PUBLIC APIS ==========
+
+  get runtimeRoute() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return new Proxy(
+      {},
+      {
+        get(_, key) {
+          if (typeof key === 'symbol') return self;
+          if (!self.server?.listening) {
+            console.warn(
+              'Runtime route declaration can be done only while the server is running. Follow documentation for more details',
+            );
+            return self;
+          }
+
+          if (Object.keys(HttpMethods).includes(key as string)) {
+            return function (routeSetUp: any) {
+              checkRouteSetUp(routeSetUp, key);
+              self.setRuntimeRoute(
+                HttpMethods[key],
+                routeSetUp.route,
+                routeSetUp.handler,
+                routeSetUp.options,
+              );
+              return self;
+            };
+          }
+
+          return self;
+        },
+      },
+    ) as Readonly<
+      {
+        [K in keyof typeof HttpMethods]: HandlerExposed;
+      }
+    >;
+  }
 
   start(cb?: (address: string) => void) {
     this.#writeMiddlewares();
