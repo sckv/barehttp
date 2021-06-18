@@ -51,20 +51,26 @@ import { BareHttp, logMe } from 'barehttp';
 
 const app = new BareHttp({ logging: false });
 
-app.route.get({
+app.get({
   route: '/route',
-  handler: function routeV1(flow) {
+  handler: function routeGet(flow) {
     flow.json({ everythings: 'OK' });
   })
 });
 
 
-app.route.post({
-  route: '/route',
-  handler: async function routeV1(flow) {
-    return 'JUST MESSAGE';
-  },
-});
+// you can chain the routes
+app
+  .post({
+    route: '/route',
+    handler: async function routePost(flow) {
+      return 'RESPONSE POST';
+    },
+  }).patch({
+    route: '/route',
+    handler: async function routePatch(flow) {
+      return 'RESPONSE PATCH';
+  })
 
 // Define a middleware
 app.use((flow) => {
@@ -83,7 +89,7 @@ import { BareHttp, logMe } from 'barehttp';
 
 const app = new BareHttp({ logging: false });
 
-app.route.get({
+app.get({
   route:'/route',
   handler: async function routeV1() {
     return { promised: 'data' };
@@ -111,7 +117,7 @@ An instance of the application
 
 Options submitted to the server at initialization
 
-#### `middlewares?` (Array<(flow: BareRequest) => Promise<void> | void>):
+#### `middlewares?` (Array<(flow: BareRequest) => Promise<void> | void>)
 
 If provided, this will apply an array of middlewares to each incoming request.
 The order of the array is the order of middlewares to apply
@@ -144,7 +150,7 @@ Enable request/response logging, format varies from `production` or `development
 
 If provided, will set a custom error handler to catch the bubbled errors from the handlers
 
-#### `errorHandlerMiddleware?` (String: 's' | 'ms')
+#### `requestTimeFormat?` (String: 's' | 'ms')
 
 Default `'s'` - seconds
 
@@ -163,7 +169,7 @@ To set options for the cookies decoding/encoding
 If enabled, and also with `logging: true`, will try to log the resolved reverse DNS of the first hop for remote ip of the client (first proxy).
 Logs follow an [Apache Common Log Format](https://httpd.apache.org/docs/2.4/logs.html)
 
-#### `statisticReport?` (Boolean)
+#### `statisticsReport?` (Boolean)
 
 Default `false`
 
@@ -174,24 +180,54 @@ Exposes a basic report with the routes usage under `GET /_report` route
 Attach a middleware `after` the middlewares optional array.
 The order of the middlewares is followed by code declarations order.
 
-### `BareServer.route` (Object)
+### `BareServer.get | post | patch | put | delete | options | head | declare` (Function)
 
 To set a route for `get | post | patch | put | delete | options | head` with following parameters:
 
 - `route` (String) - should follow a format of `/your_route`, including params as `/your_route/:param`
 - `options` (Object) - `RouteOptions`
 - `handler` (Function) - A function with the signature `(flow: BareRequest) => Promise<any> | any`
-
-Example
+- `method` (Array) - if the method is `declare` you have to indicate an array of methods to declare the route e.g. `['get', 'post']`
+  Example
 
 ```ts
-app.route.get({
+app.get({
   route: '/route',
   options: { timeout: 2000 },
   handler: async (flow) => {
     return 'My route response';
   },
 });
+
+app.declare({
+  route: '/declared_route',
+  handler: () => {
+    return 'My declared route response';
+  },
+  methods: ['post', 'patch'],
+});
+```
+
+### `BareServer.runtimeRoute.get | post | patch | put | delete | options | head | declare` (Function)
+
+Same as the above routes API, but you can only declare them when the server is `listening`
+
+```ts
+app.runtimeRoute
+  .get({
+    route: '/route',
+    options: { timeout: 2000 },
+    handler: async (flow) => {
+      return 'My route response';
+    },
+  })
+  .declare({
+    route: '/declared_runtime_route',
+    handler: () => {
+      return 'My declared runtime route response';
+    },
+    methods: ['post', 'patch'],
+  });
 ```
 
 #### `RouteOptions` (Object)
@@ -204,7 +240,7 @@ Disables all cache headers for the response. This overrides any other cache sett
 
 ##### `cache?` (CacheOptions)
 
-If set, provides a granular cache handling per route.
+If set, provides a granular cache headers handling per route.
 
 ##### `timeout?` (Number)
 
@@ -213,6 +249,18 @@ Request timeout value in `ms`. This will cancel the request _only_ for this rout
 ## `BareRequest` (Class)
 
 An instance of the request passed through to middlewares and handlers
+
+### `cm?` (CookiesManager)
+
+Access to the CookiesManager instance attached to the request.
+
+#### `CookiesManager` (Class)
+
+Internal methods to work with cookies
+
+##### `setCookie` (Function)
+
+##### `clearCookie` (Function)
 
 ### `getHeader` (Function)
 
@@ -244,11 +292,11 @@ Set outgoing headers in a "batch", merges provided headers object `{ [header: st
 
 ### `status` (Function)
 
-Set a status for the outgoing request
+Set a status for the response
 
 ### `sendStatus` (Function)
 
-Set a status for the outgoing request and send it (end the request)
+Set a status for the response and send it (end the request)
 
 ### `stream` (Function)
 
@@ -275,6 +323,8 @@ Some of the features are in progress.
 - [x] Cache headers handy handling, per route
 - [x] Cookies creation/parsing
 - [x] Request execution cancellation by timeout
+- [x] Bulk/chaining routes declaration
+- [x] Runtime routes hot swapping
 
 ## Benchmarks
 

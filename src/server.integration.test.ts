@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 import { context } from './context';
-import { BareServer } from './server';
+import { BareHttp } from './server';
 
 test('Enables statistics report', async () => {
-  const app = new BareServer({ statisticReport: true });
+  const app = new BareHttp({ statisticsReport: true });
   await app.start();
 
   const { data } = await axios.get('http://localhost:3000/_report');
@@ -16,7 +16,7 @@ test('Enables statistics report', async () => {
 });
 
 test('Statistics report sum up with a route hit', async () => {
-  const app = new BareServer({ statisticReport: true });
+  const app = new BareHttp({ statisticsReport: true });
   await app.start();
 
   await axios.get('http://localhost:3000/_report');
@@ -27,8 +27,8 @@ test('Statistics report sum up with a route hit', async () => {
 });
 
 test('Statistics report sum up with a route fail hit', async () => {
-  const app = new BareServer({ statisticReport: true });
-  app.route.get({
+  const app = new BareHttp({ statisticsReport: true });
+  app.get({
     route: '/test',
     handler: () => {
       throw new Error();
@@ -47,9 +47,9 @@ test('Statistics report sum up with a route fail hit', async () => {
 });
 
 test('Enables context in the settings', async () => {
-  const app = new BareServer({ context: true });
+  const app = new BareHttp({ context: true });
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: () => !!context.current && context.current.store instanceof Map,
   });
@@ -62,9 +62,9 @@ test('Enables context in the settings', async () => {
 });
 
 test('Enables cookies decoding in the settings', async () => {
-  const app = new BareServer({ cookies: true });
+  const app = new BareHttp({ cookies: true });
   const spyCookies = jest.fn();
-  app.route.get({
+  app.get({
     route: '/test',
     handler: (flow) => spyCookies(flow.getCookies()),
   });
@@ -79,9 +79,9 @@ test('Enables cookies decoding in the settings', async () => {
 });
 
 test('Enables cookies attachment in the settings', async () => {
-  const app = new BareServer({ cookies: true });
+  const app = new BareHttp({ cookies: true });
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: (flow) =>
       flow.cm?.setCookie('important', 'cookie', {
@@ -101,9 +101,9 @@ test('Enables cookies attachment in the settings', async () => {
 });
 
 test('Sets x-processing-time to milliseconds', async () => {
-  const app = new BareServer({ requestTimeFormat: 'ms' });
+  const app = new BareHttp({ requestTimeFormat: 'ms' });
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: () => {},
   });
@@ -116,9 +116,9 @@ test('Sets x-processing-time to milliseconds', async () => {
 });
 
 test('Base x-processing-time is in seconds', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: () => {},
   });
@@ -131,7 +131,7 @@ test('Base x-processing-time is in seconds', async () => {
 });
 
 test('Check that app started at the indicated port', async () => {
-  const app = new BareServer({ serverPort: 9999, statisticReport: true });
+  const app = new BareHttp({ serverPort: 9999, statisticsReport: true });
 
   await app.start();
   const { status } = await axios.get('http://localhost:9999/_report');
@@ -142,9 +142,9 @@ test('Check that app started at the indicated port', async () => {
 
 // test returns of the data types
 test('Server correctly classifies Buffer', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: () => {
       return Buffer.from('text_data');
@@ -159,9 +159,9 @@ test('Server correctly classifies Buffer', async () => {
 });
 
 test('Server correctly classifies JSON response', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: () => {
       return { json: 'data', in: ['here'] };
@@ -176,9 +176,9 @@ test('Server correctly classifies JSON response', async () => {
 });
 
 test('Server correctly classifies Number response', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.get({
+  app.get({
     route: '/test',
     handler: () => {
       return 123456;
@@ -192,9 +192,9 @@ test('Server correctly classifies Number response', async () => {
 });
 
 test('Server correctly classifies incoming text/plain', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.post({
+  app.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody).toBe('text_data');
@@ -211,9 +211,9 @@ test('Server correctly classifies incoming text/plain', async () => {
 });
 
 test('Server correctly classifies incoming application/json', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.post({
+  app.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody).toEqual({ json: 'json_data' });
@@ -232,9 +232,9 @@ test('Server correctly classifies incoming application/json', async () => {
 });
 
 test('Server correctly classifies incoming application/x-www-form-urlencoded', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.post({
+  app.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody).toEqual({ urlencoded: 'data', with: 'multiple_fields' });
@@ -253,9 +253,9 @@ test('Server correctly classifies incoming application/x-www-form-urlencoded', a
 });
 
 test('Server correctly classifies incoming any type', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
-  app.route.post({
+  app.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody.toString()).toEqual('this_is_buffered_text');
@@ -272,10 +272,10 @@ test('Server correctly classifies incoming any type', async () => {
 });
 
 test('Server correctly aborts on long call with a per-route timeout set', async () => {
-  const app = new BareServer();
+  const app = new BareHttp();
 
   const wait = () => new Promise((res) => setTimeout(res, 3000));
-  app.route.post({
+  app.post({
     route: '/test',
     options: { timeout: 2000 },
     handler: async () => {

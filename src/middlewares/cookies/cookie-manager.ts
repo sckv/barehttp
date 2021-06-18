@@ -6,16 +6,16 @@ import { logMe } from '../../logger';
 
 import type { BareRequest } from '../../request';
 
-export type CookieManagerOptions = cookie.CookieSerializeOptions & {
+export type CookiesManagerOptions = cookie.CookieSerializeOptions & {
   signed?: boolean;
   parseOptions?: cookie.CookieParseOptions;
   secret?: string | string[];
 };
 
-export class CookieManager {
+export class CookiesManager {
   signer: null | ReturnType<typeof secretsOperator>;
 
-  constructor(private options: CookieManagerOptions = {}, private flow: BareRequest) {
+  constructor(private options: CookiesManagerOptions = {}, private flow: BareRequest) {
     const secret = this.options.secret || '';
     const enableRotation = Array.isArray(secret);
     this.signer = typeof secret === 'string' || enableRotation ? secretsOperator(secret) : null;
@@ -24,7 +24,7 @@ export class CookieManager {
   setCookie(
     name: string,
     value: string,
-    options?: CookieManagerOptions,
+    options?: CookiesManagerOptions,
     signer?: ReturnType<typeof secretsOperator>,
   ) {
     const localSigner = signer || this.signer;
@@ -53,7 +53,7 @@ export class CookieManager {
     this.flow.setHeader('Set-Cookie', setCookie);
   }
 
-  clearCookie(name: string, options: CookieManagerOptions = {}) {
+  clearCookie(name: string, options: CookiesManagerOptions = {}) {
     const opts = {
       path: '/',
       ...options,

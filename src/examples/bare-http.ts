@@ -1,41 +1,47 @@
 import { BareHttp } from '../index';
 
-const app = new BareHttp({ logging: true });
+const app = new BareHttp({ logging: false });
 
-let counter = 0;
+app.get({
+  route: '/simple_route',
+  handler: function simpleRoute() {},
+});
+
+app.declare({
+  route: '/multiple_declaration_route',
+  handler: function multipleDeclarationRoute() {},
+  methods: ['get', 'post'],
+});
+
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
-app.route.get({
-  route: '/route',
-  options: { timeout: 2000 },
-  handler: async (flow) => {
-    flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
-    // await wait();
 
-    app.runtimeRoute.get({
-      route: `/p${counter}`,
-      options: { timeout: 2000 },
-      handler: async (flowI) => {
-        flowI.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
+app
+  .get({
+    route: '/route',
+    options: { timeout: 2000 },
+    handler: async (flow) => {
+      flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
 
-        return 'JUST MESSAGE 2';
-      },
-    });
-
-    counter++;
-
-    return 'JUST MESSAGE 1';
-  },
-});
-
-app.route.post({
-  route: '/route',
-  handler: async function routeV1() {
-    return 'JUST MESSAGE';
-  },
-});
+      // await wait();
+      return 'JUST GET MESSAGE';
+    },
+  })
+  .post({
+    route: '/route',
+    handler: async function routeV1() {
+      return 'JUST POST MESSAGE';
+    },
+  });
 
 app
   .use(() => {
+    app.runtimeRoute.get({
+      route: `/runtime_route`,
+      options: { timeout: 2000 },
+      handler: async () => {
+        return 'JUST MESSAGE 2';
+      },
+    });
     return;
   })
   .use(async () => {

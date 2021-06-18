@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-import { BareServer } from './server';
+import { BareHttp } from './server';
 
 const TEST_PORT = 8888;
-const app = new BareServer({ serverPort: TEST_PORT });
+const app = new BareHttp({ serverPort: TEST_PORT });
 
 jest.spyOn(console, 'log');
 
@@ -35,13 +35,13 @@ test('Registers a middleware through `use`', async () => {
 });
 
 test('Registers a middleware through middlewares settings array', async () => {
-  const testApp = new BareServer({ middlewares: [() => {}] });
+  const testApp = new BareHttp({ middlewares: [() => {}] });
 
   expect(testApp.getMiddlewares()).toHaveLength(1);
 });
 
 test('Uses middleware', async () => {
-  const testApp = new BareServer();
+  const testApp = new BareHttp();
 
   testApp.use((flow) => {
     flow.sendStatus(200);
@@ -55,7 +55,7 @@ test('Uses middleware', async () => {
 });
 
 test('Uses promise middleware', async () => {
-  const testApp = new BareServer();
+  const testApp = new BareHttp();
 
   testApp.use(async (flow) => {
     flow.sendStatus(200);
