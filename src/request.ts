@@ -4,7 +4,7 @@ import { StatusCodes, StatusPhrases } from './utils/';
 import { JSONParse, JSONStringify } from './utils/safe-json';
 import { logHttp, logMe } from './logger';
 import { ContentType } from './utils/content-type';
-import { CookieManager, CookieManagerOptions } from './middlewares/cookies/cookie-manager';
+import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
 
 import { types } from 'util';
 
@@ -47,7 +47,7 @@ export class BareRequest {
   requestBody?: any;
   requestHeaders: { [key: string]: any };
   statusToSend = 200;
-  cm?: CookieManager;
+  cm?: CookiesManager;
   sent = false;
 
   private cache = true;
@@ -105,8 +105,8 @@ export class BareRequest {
       });
   }
 
-  private attachCookieManager(opts?: CookieManagerOptions) {
-    this.cm = new CookieManager(opts, this);
+  private attachCookieManager(opts?: CookiesManagerOptions) {
+    this.cm = new CookiesManager(opts, this);
   }
 
   private populateCookies() {
