@@ -4,7 +4,7 @@ import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 import { generateReport } from './report';
-import { CookieManagerOptions } from './middlewares/cookies/cookie-manager';
+import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
 import { StatusCodes } from './utils';
 
 import dns from 'dns';
@@ -22,12 +22,21 @@ type RouteOpts<C> = {
    */
   timeout?: number;
 };
-interface HandlerExposed {
-  <R extends `/${string}`, C>(setUp: {
-    route: R;
-    options?: RouteOpts<C>;
-    handler: Handler;
-  }): BareServer<any>;
+interface HandlerExposed<K> {
+  <R extends `/${string}`, C>(
+    setUp: K extends 'declare'
+      ? {
+          route: R;
+          options?: RouteOpts<C>;
+          handler: Handler;
+          methods: Array<keyof typeof HttpMethods>;
+        }
+      : {
+          route: R;
+          options?: RouteOpts<C>;
+          handler: Handler;
+        },
+  ): BareServer<any> & Routes;
 }
 
 type ErrorHandler = (
@@ -65,7 +74,7 @@ type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
    * This will enable automatic cookies decoding
    */
   cookies?: boolean;
-  cookiesOptions?: CookieManagerOptions;
+  cookiesOptions?: CookiesManagerOptions;
   /**
    * Log the resolved reverse DNS first hop for remote ip of the client (first proxy)
    */
@@ -74,7 +83,7 @@ type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
    * Exposes a report with the routes usage.
    * Default `false`
    */
-  statisticReport?: boolean;
+  statisticsReport?: boolean;
 };
 
 type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
@@ -90,12 +99,14 @@ const HttpMethods = {
 
 export type RouteReport = { hits: number; success: number; fails: number };
 
-export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
+type Routes = {
+  [K in keyof typeof HttpMethods | 'declare']: HandlerExposed<K>;
+};
+class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   server: Server;
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
   #routesLib: Map<string, any> = new Map();
-
   #router = Router({ ignoreTrailingSlash: true });
   #flows: Map<string, BareRequest> = new Map();
   #errorHandler: ErrorHandler;
@@ -106,6 +117,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     // init
     this.server = createServer(this.#listener.bind(this));
     this.attachGracefulHandlers();
+    this.attachRoutesDeclaration();
 
     // context setting
     if (bareOptions.context) enableContext();
@@ -113,7 +125,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     // middlewares settings
     this.#errorHandler = bareOptions?.errorHandlerMiddleware || this.basicErrorHandler;
     this.#middlewares.push(...(bareOptions?.middlewares || []));
-    if (bareOptions.statisticReport) this.registerReport();
+    if (bareOptions.statisticsReport) this.registerReport();
 
     return this;
   }
@@ -204,7 +216,13 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     }
   }
 
-  private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts<any>) {
+  private setRoute(
+    method: Methods,
+    route: string,
+    runtime: boolean,
+    handler: Handler,
+    opts?: RouteOpts<any>,
+  ) {
     const encode = this.encodeRoute(method, route);
     this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
 
@@ -216,35 +234,21 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     this.#routesLib.set(encode, handleFn);
 
-    this.#router.on(method, route, handleFn);
-  }
+    if (runtime) {
+      this.#router.reset();
 
-  private setRuntimeRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts<any>) {
-    const encode = this.encodeRoute(method, route);
-    this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
+      this.#routesLib.forEach((handlerFn, route) => {
+        const [m, r] = this.explodeRoute(route);
 
-    if (this.#routesLib.get(encode)) {
-      this.#routesLib.delete(encode);
+        this.#router.on(m, r, handlerFn);
+      });
+    } else {
+      this.#router.on(method, route, handleFn);
     }
-
-    const handleFn = (req, _, routeParams) => {
-      this.#routes.get(encode)!.hits++;
-      this.handleRoute(req, checkParams(routeParams), handler, encode, opts);
-    };
-
-    this.#routesLib.set(encode, handleFn);
-
-    this.#router.reset();
-
-    this.#routesLib.forEach((handlerFn, route) => {
-      const [m, r] = this.explodeRoute(route);
-
-      this.#router.on(m, r, handlerFn);
-    });
   }
 
   private registerReport() {
-    this.setRoute('GET', '/_report', (flow) => {
+    this.setRoute('GET', '/_report', false, (flow) => {
       flow.setHeader('content-type', 'text/html');
       flow.send(generateReport(this.#routes));
     });
@@ -260,15 +264,17 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     const flow = this.#flows.get((req as any).id)!;
 
     // apply possible route options
-    if (opts?.disableCache) flow.disableCache();
-    if (opts?.cache) flow.setCache(opts.cache);
-    if (opts?.timeout) flow['attachTimeout'](opts.timeout);
+    if (opts) {
+      if (opts.disableCache) flow.disableCache();
+      if (opts.cache) flow.setCache(opts.cache);
+      if (opts.timeout) flow['attachTimeout'](opts.timeout);
+    }
 
     // populate with route params
     if (routeParams) flow['setParams'](routeParams);
 
     // attach a general statistic reports counter
-    if (this.bareOptions.statisticReport) {
+    if (this.bareOptions.statisticsReport) {
       flow._originalRequest.on('close', () => {
         if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
           this.#routes.get(encodedRoute)!.success++;
@@ -356,44 +362,78 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     process.on('SIGINT', graceful);
   }
 
+  private attachRoutesDeclaration() {
+    for (const method of [...Object.keys(HttpMethods), 'declare']) {
+      this[method] = (routeSetUp: any) => {
+        checkRouteSetUp(routeSetUp, method);
+
+        if (method === 'declare') {
+          for (const m of new Set<string>(routeSetUp.methods))
+            this.setRoute(
+              HttpMethods[m],
+              routeSetUp.route,
+              false,
+              routeSetUp.handler,
+              routeSetUp.options,
+            );
+        } else {
+          this.setRoute(
+            HttpMethods[method],
+            routeSetUp.route,
+            false,
+            routeSetUp.handler,
+            routeSetUp.options,
+          );
+        }
+
+        return this;
+      };
+    }
+  }
+
   // ========= PUBLIC APIS ==========
 
   get runtimeRoute() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
-    return new Proxy(
-      {},
-      {
-        get(_, key) {
-          if (typeof key === 'symbol') return self;
-          if (!self.server?.listening) {
-            console.warn(
-              'Runtime route declaration can be done only while the server is running. Follow documentation for more details',
-            );
-            return self;
-          }
+    return new Proxy({} as Readonly<Routes>, {
+      get(_, key) {
+        if (typeof key === 'symbol') return this;
+        if (!self.server?.listening) {
+          console.warn(
+            'Runtime route declaration can be done only while the server is running. Follow documentation for more details',
+          );
+          return this;
+        }
 
-          if (Object.keys(HttpMethods).includes(key as string)) {
-            return function (routeSetUp: any) {
-              checkRouteSetUp(routeSetUp, key);
-              self.setRuntimeRoute(
+        if ([...Object.keys(HttpMethods), 'declare'].includes(key as string)) {
+          return (routeSetUp: any) => {
+            checkRouteSetUp(routeSetUp, key);
+            if (key === 'declare') {
+              for (const m of new Set<string>(routeSetUp.methods))
+                self.setRoute(
+                  HttpMethods[m],
+                  routeSetUp.route,
+                  true,
+                  routeSetUp.handler,
+                  routeSetUp.options,
+                );
+            } else {
+              self.setRoute(
                 HttpMethods[key],
                 routeSetUp.route,
+                true,
                 routeSetUp.handler,
                 routeSetUp.options,
               );
-              return self;
-            };
-          }
+            }
+            return this;
+          };
+        }
 
-          return self;
-        },
+        return this;
       },
-    ) as Readonly<
-      {
-        [K in keyof typeof HttpMethods]: HandlerExposed;
-      }
-    >;
+    }) as Readonly<Routes>;
   }
 
   start(cb?: (address: string) => void) {
@@ -447,38 +487,6 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   getRoutes() {
     return [...this.#routes.keys()];
   }
-
-  get route() {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    return new Proxy(
-      {},
-      {
-        get(_, key) {
-          if (typeof key === 'symbol') return self;
-
-          if (Object.keys(HttpMethods).includes(key as string)) {
-            return function (routeSetUp: any) {
-              checkRouteSetUp(routeSetUp, key);
-              self.setRoute(
-                HttpMethods[key],
-                routeSetUp.route,
-                routeSetUp.handler,
-                routeSetUp.options,
-              );
-              return self;
-            };
-          }
-
-          return self;
-        },
-      },
-    ) as Readonly<
-      {
-        [K in keyof typeof HttpMethods]: HandlerExposed;
-      }
-    >;
-  }
 }
 
 function checkRouteSetUp(routeSetUp: { [setting: string]: any }, key: string) {
@@ -522,3 +530,11 @@ function checkParams(params: { [param: string]: string | undefined }) {
 
   return params;
 }
+
+type ServerType = {
+  new <A extends `${number}.${number}.${number}.${number}`>(args?: BareOptions<A>): BareServer<A> &
+    Routes;
+};
+
+const BareHttp = BareServer as ServerType;
+export { BareHttp };
