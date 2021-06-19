@@ -99,10 +99,18 @@ const HttpMethods = {
 
 export type RouteReport = { hits: number; success: number; fails: number };
 
-type Routes = {
+export type Routes = {
   [K in keyof typeof HttpMethods | 'declare']: HandlerExposed<K>;
 };
-class BareServer<A extends `${number}.${number}.${number}.${number}`> {
+
+export type BareHttpType<A extends `${number}.${number}.${number}.${number}` = any> =
+  BareServer<A> & Routes;
+
+export type ServerMergedType = {
+  new <A extends `${number}.${number}.${number}.${number}`>(args?: BareOptions<A>): BareHttpType<A>;
+};
+
+export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   server: Server;
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
@@ -433,7 +441,7 @@ class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
         return this;
       },
-    }) as Readonly<Routes>;
+    });
   }
 
   start(cb?: (address: string) => void) {
@@ -531,10 +539,6 @@ function checkParams(params: { [param: string]: string | undefined }) {
   return params;
 }
 
-type ServerType = {
-  new <A extends `${number}.${number}.${number}.${number}`>(args?: BareOptions<A>): BareServer<A> &
-    Routes;
-};
+const BareHttp = BareServer as ServerMergedType;
 
-const BareHttp = BareServer as ServerType;
 export { BareHttp };
