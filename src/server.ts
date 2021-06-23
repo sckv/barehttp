@@ -308,7 +308,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
   private soundRouteReturn(response: any, flow: BareRequest) {
     if (flow.sent) return;
-    if (!response) flow.send();
+    if (typeof response === 'undefined' || response === null) return flow.send();
 
     switch (response.constructor) {
       case Uint8Array:
@@ -328,6 +328,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
         flow.json(response);
         break;
       default:
+        flow.send();
         logMe.warn('Unknown type to send');
     }
   }
