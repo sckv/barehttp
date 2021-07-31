@@ -274,10 +274,10 @@ test('Server correctly classifies incoming any type', async () => {
 test('Server correctly aborts on long call with a per-route timeout set', async () => {
   const app = new BareHttp();
 
-  const wait = () => new Promise((res) => setTimeout(res, 3000));
+  const wait = () => new Promise((res) => setTimeout(res, 2000));
   app.post({
     route: '/test',
-    options: { timeout: 2000 },
+    options: { timeout: 200 },
     handler: async () => {
       await wait();
       return 'ok';
@@ -293,4 +293,19 @@ test('Server correctly aborts on long call with a per-route timeout set', async 
   );
   expect(status).toBe(503);
   await app.stop();
+});
+
+test('Check basic cors middleware is working with default options', async () => {
+  const app = new BareHttp({ cors: true });
+  app.get({
+    route: '/test',
+    handler: () => 'return data',
+  });
+
+  await app.start();
+  const response = await axios.get('http://localhost:3000/test');
+
+  await app.stop();
+
+  expect(response.headers['access-control-allow-origin']).toBe('*');
 });

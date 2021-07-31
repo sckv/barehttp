@@ -1,12 +1,13 @@
 import hyperid from 'hyperid';
 
-import { StatusCodes, StatusPhrases } from './utils/';
+import { StatusCodes, StatusCodesUnion, StatusPhrases } from './utils/';
 import { JSONParse, JSONStringify } from './utils/safe-json';
 import { logHttp, logMe } from './logger';
 import { ContentType } from './utils/content-type';
 import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
 
 import { types } from 'util';
+import { Writable } from 'stream';
 
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
@@ -70,7 +71,7 @@ export class BareRequest {
     this.contentType = this._originalRequest.headers['content-type'] as any;
     this.requestHeaders = this._originalRequest.headers;
 
-    _originalRequest['id'] = this.ID; // to receive an id later on in the route handler
+    _originalRequest['flow'] = this; // to receive an id later on in the route handler
 
     this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.ID.code });
     this.startTime = process.hrtime();
@@ -162,8 +163,7 @@ export class BareRequest {
   private attachTimeout(timeout: number) {
     if (this.timeout) clearTimeout(this.timeout);
     this.timeout = setTimeout(() => {
-      this.status(503);
-      this.send('Server aborted connection by overtime');
+      this.status(503)._send('Server aborted connection by overtime');
     }, timeout);
 
     // attach listener to clear the timeout
@@ -201,26 +201,32 @@ export class BareRequest {
       cacheHeader.push(`${cacheOpts.expirationKind}=${cacheOpts.expirationSeconds ?? 3600}`);
     if (cacheOpts.revalidation) cacheHeader.push(cacheOpts.revalidation);
 
-    if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader.join(', '));
+    if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader);
   }
 
   setHeader(header: string, value: string | number | string[] | number[]) {
-    this.headers[header] = Array.isArray(value) ? value.map((v) => '' + v).join('; ') : '' + value;
-  }
-
-  setHeaders(headers: { [header: string]: string | number }) {
-    for (const header of Object.keys(headers)) {
-      this.headers[header] = '' + headers[header];
+    const old = this.headers[header];
+    const parsedVal = Array.isArray(value) ? value.join(', ') : '' + value;
+    if (old) {
+      this.headers[header] += `, ${parsedVal}`;
+    } else {
+      this.headers[header] = parsedVal;
     }
   }
 
-  status(status: typeof StatusCodes[keyof typeof StatusCodes]) {
-    this.statusToSend = status;
+  setHeaders(headers: { [header: string]: string | number | string[] | number[] }) {
+    for (const [header, value] of Object.entries(headers)) {
+      this.setHeader(header, value);
+    }
   }
 
-  sendStatus(status: typeof StatusCodes[keyof typeof StatusCodes]) {
-    this.status(status);
-    this.send();
+  status(status: StatusCodesUnion) {
+    this.statusToSend = status;
+    return this;
+  }
+
+  sendStatus(status: StatusCodesUnion) {
+    this.status(status)._send();
   }
 
   stream<T extends NodeJS.WritableStream>(stream: T) {
@@ -231,10 +237,10 @@ export class BareRequest {
     // to generate with fast-json-stringify schema issue #1
     const jsoned = JSONStringify(data);
     this.setHeader('Content-Type', 'application/json');
-    this.send(jsoned ? jsoned : undefined);
+    this._send(jsoned ? jsoned : undefined);
   }
 
-  send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
+  _send(chunk?: string | ArrayBuffer | NodeJS.ArrayBufferView | SharedArrayBuffer) {
     if (this._originalResponse.socket?.destroyed) {
       logMe.error("Tying to send into closed client's stream");
       return;
@@ -273,5 +279,32 @@ export class BareRequest {
       this.headers,
     );
     this._originalResponse.end(toSend);
+  }
+
+  send(anything?: any) {
+    if (this.sent) return;
+    if (typeof anything === 'undefined' || anything === null) return this._send();
+
+    switch (anything.constructor) {
+      case Uint8Array:
+      case Uint16Array:
+      case Uint32Array:
+      case Buffer:
+      case String:
+        this._send(anything);
+        break;
+      case Boolean:
+      case Number:
+        this._send('' + anything);
+      case Writable:
+        this.stream(anything);
+        break;
+      case Object:
+        this.json(anything);
+        break;
+      default:
+        this._send();
+        logMe.warn('Unknown type to send');
+    }
   }
 }

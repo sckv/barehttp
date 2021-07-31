@@ -66,7 +66,8 @@ app
     handler: async function routePost(flow) {
       return 'RESPONSE POST';
     },
-  }).patch({
+  })
+  .patch({
     route: '/route',
     handler: async function routePatch(flow) {
       return 'RESPONSE PATCH';
@@ -330,12 +331,14 @@ Some of the features are in progress.
 
 - [x] Request wide context storage and incorporated tracing (ready for cloud)
 - [x] UID (adopted or generated)
+- [x] WebSocket server exposure
 - [x] Request-Processing-Time header and value
 - [x] Promised or conventional middlewares
 - [x] Logging and serialized with `pino`
 - [x] Routes usage report and endpoint
 - [x] Cache headers handy handling, per route
 - [x] Cookies creation/parsing
+- [x] CORS middleware options
 - [x] Request execution cancellation by timeout
 - [x] Bulk/chaining routes declaration
 - [x] Runtime routes hot swapping
