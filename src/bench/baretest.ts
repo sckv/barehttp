@@ -1,8 +1,6 @@
 import { BareHttp } from '../index';
 
-const brt = new BareHttp({
-  ws: false,
-});
+const brt = new BareHttp({ statisticsReport: true });
 
 brt.get({
   route: '/myroute',
