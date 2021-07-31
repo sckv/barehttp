@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-import { context } from './context';
-import { BareHttp } from './server';
+import { context } from '../context';
+import { BareHttp } from '../server';
 
 test('Enables statistics report', async () => {
   const app = new BareHttp({ statisticsReport: true });

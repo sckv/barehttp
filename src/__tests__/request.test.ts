@@ -1,4 +1,4 @@
-import { BareRequest } from './request';
+import { BareRequest } from '../request';
 
 import { IncomingMessage, ServerResponse } from 'http';
 import { Socket } from 'net';
@@ -15,7 +15,7 @@ const createRequest = () => {
 test('Generates uuid upon instantiation', () => {
   const { request } = createRequest();
 
-  expect(request.uuid).not.toBeUndefined();
+  expect(request.ID).not.toBeUndefined();
 });
 
 test('Gets an uuid upon instantiation from headers', () => {
@@ -25,7 +25,7 @@ test('Gets an uuid upon instantiation from headers', () => {
 
   const request = new BareRequest(inc, out);
 
-  expect(request.uuid).toBe('SOME_UUID');
+  expect(request.ID.code).toBe('SOME_UUID');
 });
 
 test('Adds logging listener if set up', () => {
