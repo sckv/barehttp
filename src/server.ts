@@ -1,4 +1,5 @@
 import Router from 'find-my-way';
+import { Server as WServer, ServerOptions } from 'ws';
 
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
@@ -84,6 +85,13 @@ type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
    * Default `false`
    */
   statisticsReport?: boolean;
+  /**
+   * WebSocket server exposure
+   */
+  ws?: boolean;
+  wsOptions?: Omit<ServerOptions, 'host' | 'port' | 'server' | 'noServer'> & {
+    closeHandler?: (server: WServer) => Promise<void>;
+  };
 };
 
 type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
@@ -112,12 +120,16 @@ export type ServerMergedType = {
 
 export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   server: Server;
+  ws?: WServer;
+
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
   #routesLib: Map<string, any> = new Map();
   #router = Router({ ignoreTrailingSlash: true });
-  #flows: Map<string, BareRequest> = new Map();
-  #errorHandler: ErrorHandler;
+  #flows: WeakMap<{ code: string }, BareRequest> = new WeakMap();
+  #errorHandler: ErrorHandler = this.basicErrorHandler;
+  #port = 3000;
+  #host = '0.0.0.0';
 
   #runMiddlewaresSequence: (flow: BareRequest) => void = (_) => _;
 
@@ -125,15 +137,8 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     // init
     this.server = createServer(this.#listener.bind(this));
     this.attachGracefulHandlers();
-    this.attachRoutesDeclaration();
-
-    // context setting
-    if (bareOptions.context) enableContext();
-
-    // middlewares settings
-    this.#errorHandler = bareOptions?.errorHandlerMiddleware || this.basicErrorHandler;
-    this.#middlewares.push(...(bareOptions?.middlewares || []));
-    if (bareOptions.statisticsReport) this.registerReport();
+    this.attachRoutesDeclarator();
+    this.mainOptionsSetter();
 
     return this;
   }
@@ -146,17 +151,14 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     // init and attach request uuid to the context
     if (this.bareOptions.context) {
       newContext('request');
-      context.current?.store.set('id', flow.uuid);
+      context.current?.store.set('id', flow.ID.code);
     }
 
     if (requestTimeFormat) flow['setTimeFormat'](requestTimeFormat);
 
-    // listener to remove already finished flow from the memory storage
-    request.on('close', () => this.#flows.delete(flow.uuid));
-
     // attach a flow to the flow memory storage
-    this.#flows.set(flow.uuid, flow);
-    this.applyMiddlewares(flow.uuid).catch((e) => this.#errorHandler(e, flow, 400));
+    this.#flows.set(flow.ID, flow);
+    this.applyMiddlewares(flow.ID).catch((e) => this.#errorHandler(e, flow, 400));
   };
 
   /**
@@ -182,7 +184,32 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     this.#runMiddlewaresSequence = new AsyncFunction('flow', text);
   };
 
-  private async applyMiddlewares(flowId: string) {
+  private mainOptionsSetter = () => {
+    const { bareOptions: bo } = this;
+
+    this.#port = +(bo.serverPort || process.env.PORT || 3000);
+    this.#host = typeof bo.serverAddress === 'string' ? bo.serverAddress : '0.0.0.0';
+
+    // context setting
+    if (bo.context) enableContext();
+
+    // ws attachment
+    if (bo.ws) {
+      const wsOpts = { server: this.server };
+      if (bo.wsOptions) Object.assign(wsOpts, bo.wsOptions);
+      this.ws = new WServer(wsOpts);
+    }
+
+    // middlewares settings
+    if (bo.errorHandlerMiddleware) {
+      this.#errorHandler = bo.errorHandlerMiddleware;
+    }
+
+    this.#middlewares.push(...(bo.middlewares || []));
+    if (bo.statisticsReport) this.registerReport();
+  };
+
+  private async applyMiddlewares(flowId: { code: string }) {
     const flow = this.#flows.get(flowId);
     if (!flow) {
       throw new Error(`No flow been found for id ${flowId}, theres a sync mistake in the server.`); // should NEVER happen
@@ -351,6 +378,16 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     flow.json({ ...e, message: e.message, stack: e.stack });
   }
 
+  private async stopWs() {
+    if (!this.ws) return;
+
+    if (this.bareOptions.wsOptions?.closeHandler) {
+      await this.bareOptions.wsOptions.closeHandler(this.ws);
+    }
+
+    this.ws.close();
+  }
+
   private attachGracefulHandlers() {
     const graceful = async (code = 0) => {
       await this.stop();
@@ -371,7 +408,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     process.on('SIGINT', graceful);
   }
 
-  private attachRoutesDeclaration() {
+  private attachRoutesDeclarator() {
     for (const method of [...Object.keys(HttpMethods), 'declare']) {
       this[method] = (routeSetUp: any) => {
         checkRouteSetUp(routeSetUp, method);
@@ -401,6 +438,11 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   // ========= PUBLIC APIS ==========
+
+  // TODO: add working options setter
+  // setOption<B extends BareOptions<any>, O extends keyof B>(option: O, arg: B[O]) {
+  //   throw new Error('Not implemented')
+  // }
 
   get runtimeRoute() {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -447,27 +489,25 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
   start(cb?: (address: string) => void) {
     this.#writeMiddlewares();
-
-    const port = this.bareOptions?.serverPort || process.env.PORT || 3000;
-    const address = this.bareOptions?.serverAddress || '0.0.0.0';
-
-    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
     return new Promise<void>((res) =>
-      this.server.listen(+port, address, undefined, () => {
-        cb ? cb(`http://0.0.0.0:${port}`) : void 0;
+      // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
+      this.server.listen(this.#port, this.#host, undefined, () => {
+        cb ? cb(`http://0.0.0.0:${this.#port}`) : void 0;
         res();
       }),
     );
   }
 
-  stop(cb?: (e?: Error) => void) {
-    for (const flow of this.#flows.values()) {
-      if (!flow.sent) {
-        flow.status(500);
-        flow.send('Server terminated');
-      }
-    }
-    return new Promise<void>((res, rej) => {
+  async stop(cb?: (e?: Error) => void) {
+    // TODO: to solve problem with weakmap as we have no way to iterate through all clients
+    // for (const flow of this.#flows.values()) {
+    //   if (!flow.sent) {
+    //     flow.status(500);
+    //     flow.send('Server terminated');
+    //   }
+    // }
+    if (!this.ws) await this.stopWs();
+    await new Promise<void>((res, rej) => {
       this.server?.close((e) => {
         if (e) {
           rej(e);
