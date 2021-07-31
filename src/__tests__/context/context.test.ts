@@ -1,4 +1,4 @@
-import { context, enableContext, newContext } from './index';
+import { context, enableContext, newContext } from '../../context/index';
 
 test("Do not create execution if it's not enabled", () => {
   newContext('newContext');

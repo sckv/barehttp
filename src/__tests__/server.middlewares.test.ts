@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { BareHttp } from './server';
+import { BareHttp } from '../server';
 
 const TEST_PORT = 8888;
 const app = new BareHttp({ serverPort: TEST_PORT });

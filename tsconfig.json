@@ -20,5 +20,5 @@
     "typeRoots": ["./node_modules/@types", "@types/**/*"]
   },
   "include": ["src"],
-  "exclude": ["**/__tests__/**", "src/examples"]
+  "exclude": ["**/__tests__/**", "src/examples", "src/bench"]
 }
