@@ -33,7 +33,7 @@ test('Adds logging listener if set up', () => {
 
   const listeners = out.listenerCount('close');
 
-  new BareRequest(inc, out, true);
+  new BareRequest(inc, out, { logging: true });
 
   expect(out.listenerCount('close')).toBe(listeners + 1);
 });
@@ -49,7 +49,7 @@ test('Gets response header', () => {
 test('Adds basic headers to the request upon instantiation', () => {
   const { request } = createRequest();
 
-  expect(request.getHeader('Content-Type')).toBe('text/plain');
+  expect(request.getHeader('Content-Type')).toBe('text/plain; charset=utf-8');
   expect(request.getHeader('X-Request-Id')).toEqual(expect.any(String));
 });
 
