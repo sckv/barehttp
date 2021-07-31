@@ -116,7 +116,7 @@ test('Sets x-processing-time to milliseconds', async () => {
 });
 
 test('Base x-processing-time is in seconds', async () => {
-  const app = new BareHttp();
+  const app = new BareHttp({ requestTimeFormat: 's' });
 
   app.get({
     route: '/test',
