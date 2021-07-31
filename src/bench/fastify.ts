@@ -1,10 +1,8 @@
-const fastify = require('fastify')({
-  logger: true,
-});
+const fastify = require('fastify')();
 
 // Declare a route
-fastify.get('/route', function (request, reply) {
-  reply.send('JUST RESPONSE');
+fastify.get('/myroute', function (request, reply) {
+  reply.send('just response');
 });
 
 // Run the server!

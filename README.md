@@ -146,6 +146,16 @@ Default `false`
 
 Enable request/response logging, format varies from `production` or `development` environments, though to change use e.g. `NODE_ENV=production`
 
+#### `ws?` (Boolean)
+
+Default `false`
+
+Enable WebSocket support through `ws` package.
+
+#### `wsOptions?` (Object)
+
+Refer to [ws](https://github.com/websockets/ws) documentation.
+
 #### `errorHandlerMiddleware?` ((err: any, flow: BareRequest) => void)
 
 If provided, will set a custom error handler to catch the bubbled errors from the handlers
@@ -229,6 +239,10 @@ app.runtimeRoute
     methods: ['post', 'patch'],
   });
 ```
+
+### `BareServer.ws` (WebSocketServer)
+
+Refer to [external WebSocketServer](https://github.com/websockets/ws#external-https-server) for documentation.
 
 #### `RouteOptions` (Object)
 

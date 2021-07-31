@@ -41,7 +41,7 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
 }, {} as Codes);
 
 export class BareRequest {
-  uuid: string;
+  ID: { code: string };
   params: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;
@@ -65,14 +65,14 @@ export class BareRequest {
     public _originalResponse: ServerResponse,
     logging?: boolean,
   ) {
-    this.uuid = (_originalRequest.headers['x-request-id'] as string) || generateId();
+    this.ID = { code: (_originalRequest.headers['x-request-id'] as string) || generateId() };
     this.remoteIp = _originalRequest.socket.remoteAddress;
     this.contentType = this._originalRequest.headers['content-type'] as any;
     this.requestHeaders = this._originalRequest.headers;
 
-    _originalRequest['id'] = this.uuid; // to receive an id later on in the route handler
+    _originalRequest['id'] = this.ID; // to receive an id later on in the route handler
 
-    this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.uuid });
+    this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.ID.code });
     this.startTime = process.hrtime();
 
     // call logging section
