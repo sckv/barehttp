@@ -1,2 +1,4 @@
 export { StatusPhrases } from './status-phrases';
-export { StatusCodes } from './status-codes';
+export { StatusCodes, StatusCodesUnion } from './status-codes';
+export { HttpMethods, HttpMethodsUnion, HttpMethodsUnionUppercase } from './http-methods';
+export { JSONStringify, JSONParse } from './safe-json';
