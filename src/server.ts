@@ -53,7 +53,7 @@ type BareOptions<A extends IP> = {
   errorHandlerMiddleware?: ErrorHandler;
   /**
    * Request time format in `seconds` or `milliseconds`
-   * Default 's' - seconds
+   * Default - disabled
    */
   requestTimeFormat?: 's' | 'ms';
   /**
@@ -138,15 +138,13 @@ export class BareServer<A extends IP> {
   #listener = (request: IncomingMessage, response: ServerResponse) => {
     const { requestTimeFormat, logging } = this.bareOptions;
 
-    const flow = new BareRequest(request, response, logging);
+    const flow = new BareRequest(request, response, { logging, requestTimeFormat });
 
     // init and attach request uuid to the context
     if (this.bareOptions.context) {
       newContext('request');
       context.current?.store.set('id', flow.ID.code);
     }
-
-    if (requestTimeFormat) flow['setTimeFormat'](requestTimeFormat);
 
     // attach a flow to the flow memory storage
     this.applyMiddlewares(flow).catch((e) => this.#errorHandler(e, flow, 400));

@@ -52,10 +52,10 @@ export class BareRequest {
   sent = false;
 
   private cache = true;
-  private startTime: [seconds: number, nanoseconds: number];
+  private startTime?: [seconds: number, nanoseconds: number];
   private startDate = new Date();
   private remoteClient = '';
-  private countTimeFormat: 'ms' | 's' = 's';
+  private requestTimeFormat?: 'ms' | 's';
   private headers: { [header: string]: string | string[] } = {};
   private cookies: { [cooke: string]: string } = {};
   private contentType?: keyof typeof ContentType;
@@ -64,20 +64,27 @@ export class BareRequest {
   constructor(
     public _originalRequest: IncomingMessage,
     public _originalResponse: ServerResponse,
-    logging?: boolean,
+    options?: { logging?: boolean; requestTimeFormat?: 'ms' | 's' },
   ) {
     this.ID = { code: (_originalRequest.headers['x-request-id'] as string) || generateId() };
     this.remoteIp = _originalRequest.socket.remoteAddress;
     this.contentType = this._originalRequest.headers['content-type'] as any;
     this.requestHeaders = this._originalRequest.headers;
 
-    _originalRequest['flow'] = this; // to receive an id later on in the route handler
+    _originalRequest['flow'] = this; // to receive flow object later on in the route handler
 
-    this.setHeaders({ 'Content-Type': 'text/plain', 'X-Request-Id': this.ID.code });
-    this.startTime = process.hrtime();
+    this.setHeaders({
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-Request-Id': this.ID.code,
+    });
+
+    if (options?.requestTimeFormat) {
+      this.startTime = process.hrtime();
+      this.requestTimeFormat = options.requestTimeFormat;
+    }
 
     // call logging section
-    if (logging === true) {
+    if (options?.logging === true) {
       _originalResponse.on('close', () =>
         logHttp(
           this.headers,
@@ -140,20 +147,18 @@ export class BareRequest {
   }
 
   private setRequestTime() {
+    if (!this.requestTimeFormat) return;
+
     const diff = process.hrtime(this.startTime);
 
     const time =
-      diff[0] * (this.countTimeFormat === 's' ? 1 : 1e3) +
-      diff[1] * (this.countTimeFormat === 's' ? 1e-9 : 1e-6);
+      diff[0] * (this.requestTimeFormat === 's' ? 1 : 1e3) +
+      diff[1] * (this.requestTimeFormat === 's' ? 1e-9 : 1e-6);
 
     this.setHeaders({
       'X-Processing-Time': time,
-      'X-Processing-Time-Mode': this.countTimeFormat === 's' ? 'seconds' : 'milliseconds',
+      'X-Processing-Time-Mode': this.requestTimeFormat === 's' ? 'seconds' : 'milliseconds',
     });
-  }
-
-  private setTimeFormat(format: 's' | 'ms') {
-    this.countTimeFormat = format;
   }
 
   private cleanHeader(header: string) {
@@ -245,7 +250,8 @@ export class BareRequest {
       logMe.error("Tying to send into closed client's stream");
       return;
     }
-    if (this._originalResponse.headersSent) {
+
+    if (this._originalResponse.headersSent || this.sent) {
       logMe.error('Trying to send with the headers already sent');
       return;
     }
