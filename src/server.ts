@@ -6,15 +6,23 @@ import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
 import { generateReport } from './report';
 import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
-import { StatusCodes } from './utils';
+import {
+  HttpMethods,
+  HttpMethodsUnion,
+  HttpMethodsUnionUppercase,
+  StatusCodes,
+  StatusCodesUnion,
+} from './utils';
+import { Cors, CorsOptions } from './middlewares/cors/cors';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
-import { Writable } from 'stream';
 
 type Middleware = (flow: BareRequest) => Promise<void> | void;
 type Handler = (flow: BareRequest) => any;
+type ErrorHandler = (err: any, flow: BareRequest, status?: StatusCodesUnion) => void;
 
+type IP = `${number}.${number}.${number}.${number}`;
 type RouteOpts<C> = {
   disableCache?: C extends true ? C : undefined;
   cache?: C extends true ? undefined : CacheOpts;
@@ -23,30 +31,8 @@ type RouteOpts<C> = {
    */
   timeout?: number;
 };
-interface HandlerExposed<K> {
-  <R extends `/${string}`, C>(
-    setUp: K extends 'declare'
-      ? {
-          route: R;
-          options?: RouteOpts<C>;
-          handler: Handler;
-          methods: Array<keyof typeof HttpMethods>;
-        }
-      : {
-          route: R;
-          options?: RouteOpts<C>;
-          handler: Handler;
-        },
-  ): BareServer<any> & Routes;
-}
 
-type ErrorHandler = (
-  err: any,
-  flow: BareRequest,
-  status?: typeof StatusCodes[keyof typeof StatusCodes],
-) => void;
-
-type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
+type BareOptions<A extends IP> = {
   middlewares?: Array<Middleware>;
   serverPort?: number;
   /**
@@ -92,33 +78,39 @@ type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
   wsOptions?: Omit<ServerOptions, 'host' | 'port' | 'server' | 'noServer'> & {
     closeHandler?: (server: WServer) => Promise<void>;
   };
+  /**
+   * Enable Cors
+   */
+  cors?: boolean | CorsOptions;
 };
 
-type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
-const HttpMethods = {
-  get: 'GET',
-  post: 'POST',
-  put: 'PUT',
-  delete: 'DELETE',
-  patch: 'PATCH',
-  options: 'OPTIONS',
-  head: 'HEAD',
-} as const;
+interface HandlerExposed<K> {
+  <R extends `/${string}`, C>(
+    setUp: K extends 'declare'
+      ? {
+          route: R;
+          options?: RouteOpts<C>;
+          handler: Handler;
+          methods: Array<HttpMethodsUnion>;
+        }
+      : {
+          route: R;
+          options?: RouteOpts<C>;
+          handler: Handler;
+        },
+  ): BareServer<any> & Routes;
+}
 
 export type RouteReport = { hits: number; success: number; fails: number };
-
 export type Routes = {
-  [K in keyof typeof HttpMethods | 'declare']: HandlerExposed<K>;
+  [K in HttpMethodsUnion | 'declare']: HandlerExposed<K>;
 };
-
-export type BareHttpType<A extends `${number}.${number}.${number}.${number}` = any> =
-  BareServer<A> & Routes;
-
+export type BareHttpType<A extends IP = any> = BareServer<A> & Routes;
 export type ServerMergedType = {
-  new <A extends `${number}.${number}.${number}.${number}`>(args?: BareOptions<A>): BareHttpType<A>;
+  new <A extends IP>(args?: BareOptions<A>): BareHttpType<A>;
 };
 
-export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
+export class BareServer<A extends IP> {
   server: Server;
   ws?: WServer;
 
@@ -126,8 +118,8 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   #routes: Map<string, RouteReport> = new Map();
   #routesLib: Map<string, any> = new Map();
   #router = Router({ ignoreTrailingSlash: true });
-  #flows: WeakMap<{ code: string }, BareRequest> = new WeakMap();
   #errorHandler: ErrorHandler = this.basicErrorHandler;
+  #corsInstance?: Cors;
   #port = 3000;
   #host = '0.0.0.0';
 
@@ -157,8 +149,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     if (requestTimeFormat) flow['setTimeFormat'](requestTimeFormat);
 
     // attach a flow to the flow memory storage
-    this.#flows.set(flow.ID, flow);
-    this.applyMiddlewares(flow.ID).catch((e) => this.#errorHandler(e, flow, 400));
+    this.applyMiddlewares(flow).catch((e) => this.#errorHandler(e, flow, 400));
   };
 
   /**
@@ -174,7 +165,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     if (maxOrder > 0) {
       while (order <= maxOrder - 1) {
         lines.push(`if (flow.sent) return;`);
-        lines.push(`await this.resolveMiddleware(${order}, flow);`);
+        lines.push(`await this.resolveMiddleware(flow, ${order});`);
         order++;
       }
     }
@@ -205,14 +196,24 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
       this.#errorHandler = bo.errorHandlerMiddleware;
     }
 
+    if (this.bareOptions.cors) {
+      const corsOpts = typeof this.bareOptions.cors === 'object' ? this.bareOptions.cors : {};
+      this.#corsInstance = new Cors(corsOpts);
+    }
+
     this.#middlewares.push(...(bo.middlewares || []));
     if (bo.statisticsReport) this.registerReport();
   };
 
-  private async applyMiddlewares(flowId: { code: string }) {
-    const flow = this.#flows.get(flowId);
+  private async applyMiddlewares(flow: BareRequest) {
     if (!flow) {
-      throw new Error(`No flow been found for id ${flowId}, theres a sync mistake in the server.`); // should NEVER happen
+      throw new Error(
+        `No flow been found to apply middlewares for, theres a sync mistake in the server.`,
+      ); // should NEVER happen
+    }
+
+    if (this.bareOptions.cors) {
+      this.resolveMiddleware(flow, 0, this.#corsInstance?.corsMiddleware.bind(this.#corsInstance));
     }
 
     // invoke body stream consumption
@@ -242,9 +243,10 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   /**
    * This handler is used in async generated middlewares runtime function
    */
-  private async resolveMiddleware(order: number, flow: BareRequest) {
+  private async resolveMiddleware(flow: BareRequest, order: number, middleware?: Middleware) {
     try {
-      const response = this.#middlewares[order](flow);
+      const toExecute = middleware || this.#middlewares[order];
+      const response = toExecute(flow);
       if (response instanceof Promise) await response;
     } catch (e) {
       this.#errorHandler(e, flow);
@@ -252,7 +254,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   private setRoute(
-    method: Methods,
+    method: HttpMethodsUnionUppercase,
     route: string,
     runtime: boolean,
     handler: Handler,
@@ -296,7 +298,13 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     encodedRoute: string,
     opts?: RouteOpts<any>,
   ) {
-    const flow = this.#flows.get((req as any).id)!;
+    const flow = (req as any).flow as BareRequest;
+
+    if (!flow) {
+      throw new Error(
+        `No flow been found to route this request, theres a sync mistake in the server.`,
+      ); // should NEVER happen
+    }
 
     // apply possible route options
     if (opts) {
@@ -322,41 +330,12 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     try {
       const routeReturn = handle.bind(undefined)(flow);
       if (routeReturn instanceof Promise) {
-        routeReturn
-          .catch((e) => this.#errorHandler(e, flow))
-          .then((result) => this.soundRouteReturn(result, flow));
+        routeReturn.then((result) => flow.send(result)).catch((e) => this.#errorHandler(e, flow));
       } else {
-        this.soundRouteReturn(routeReturn, flow);
+        flow.send(routeReturn);
       }
     } catch (e) {
       this.#errorHandler(e, flow);
-    }
-  }
-
-  private soundRouteReturn(response: any, flow: BareRequest) {
-    if (flow.sent) return;
-    if (typeof response === 'undefined' || response === null) return flow.send();
-
-    switch (response.constructor) {
-      case Uint8Array:
-      case Uint16Array:
-      case Uint32Array:
-      case Buffer:
-      case String:
-        flow.send(response);
-        break;
-      case Boolean:
-      case Number:
-        flow.send('' + response);
-      case Writable:
-        flow.stream(response);
-        break;
-      case Object:
-        flow.json(response);
-        break;
-      default:
-        flow.send();
-        logMe.warn('Unknown type to send');
     }
   }
 
@@ -366,7 +345,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   private explodeRoute(route: string) {
-    return route.split('?') as [method: Methods, route: string];
+    return route.split('?') as [method: HttpMethodsUnionUppercase, route: string];
   }
 
   private basicErrorHandler(
@@ -374,8 +353,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     flow: BareRequest,
     status?: typeof StatusCodes[keyof typeof StatusCodes],
   ) {
-    flow.status(status ?? 500);
-    flow.json({ ...e, message: e.message, stack: e.stack });
+    flow.status(status ?? 500).json({ ...e, message: e.message, stack: e.stack });
   }
 
   private async stopWs() {
@@ -499,7 +477,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
   }
 
   async stop(cb?: (e?: Error) => void) {
-    // TODO: to solve problem with weakmap as we have no way to iterate through all clients
+    // TODO: to solve problem announcing to clients the disconnect
     // for (const flow of this.#flows.values()) {
     //   if (!flow.sent) {
     //     flow.status(500);

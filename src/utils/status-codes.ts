@@ -337,3 +337,5 @@ export const StatusCodes = {
    */
   USE_PROXY: 305,
 } as const;
+
+export type StatusCodesUnion = typeof StatusCodes[keyof typeof StatusCodes];
