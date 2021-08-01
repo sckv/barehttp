@@ -85,15 +85,32 @@ test('Sets cache headers for no-store; max-age=0; must-revalidate', () => {
   expect(request.getHeader('Cache-Control')).toBe('no-store, max-age=0, must-revalidate');
 });
 
-test('Sets response header', () => {
+test('Adds a response header', () => {
   const { request } = createRequest();
-  request.setHeader('Vary', 'Origin');
+  request.addHeader('Vary', 'Origin');
 
   expect(request.getHeader('Vary')).toBe('Origin');
 });
-test('Sets multiple response headers', () => {
+
+test('Adds a response header to already existing', () => {
   const { request } = createRequest();
-  request.setHeaders({ Vary: 'Origin', Host: 'http://barehttp.com' });
+  request.addHeader('Vary', 'Origin');
+  request.addHeader('Vary', 'Destination');
+
+  expect(request.getHeader('Vary')).toBe('Origin, Destination');
+});
+
+test('Overwrites a response header to already existing', () => {
+  const { request } = createRequest();
+  request.addHeader('Vary', 'Origin');
+  request.setHeader('Vary', 'Destination');
+
+  expect(request.getHeader('Vary')).toBe('Destination');
+});
+
+test('Adds multiple response headers', () => {
+  const { request } = createRequest();
+  request.addHeaders({ Vary: 'Origin', Host: 'http://barehttp.com' });
 
   expect(request.getHeader('Vary')).toBe('Origin');
   expect(request.getHeader('Host')).toBe('http://barehttp.com');

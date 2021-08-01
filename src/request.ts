@@ -81,7 +81,7 @@ export class BareRequest {
     // parsed;
     _originalRequest['flow'] = this; // to receive flow object later on in the route handler
 
-    this.setHeaders({
+    this.addHeaders({
       'Content-Type': 'text/plain; charset=utf-8',
       'X-Request-Id': this.ID.code,
     });
@@ -217,7 +217,7 @@ export class BareRequest {
     if (cacheHeader.length > 0) this.setHeader(directive, cacheHeader);
   }
 
-  setHeader(header: string, value: string | number | string[] | number[]) {
+  addHeader(header: string, value: string | number | string[] | number[]) {
     const old = this.headers[header];
     const parsedVal = Array.isArray(value) ? value.join(', ') : '' + value;
     if (old) {
@@ -227,9 +227,20 @@ export class BareRequest {
     }
   }
 
+  setHeader(header: string, value: string | number | string[] | number[]) {
+    const parsedVal = Array.isArray(value) ? value.join(', ') : '' + value;
+    this.headers[header] = parsedVal;
+  }
+
   setHeaders(headers: { [header: string]: string | number | string[] | number[] }) {
     for (const [header, value] of Object.entries(headers)) {
       this.setHeader(header, value);
+    }
+  }
+
+  addHeaders(headers: { [header: string]: string | number | string[] | number[] }) {
+    for (const [header, value] of Object.entries(headers)) {
+      this.addHeader(header, value);
     }
   }
 
