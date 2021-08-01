@@ -49,7 +49,7 @@ yarn add barehttp
 ```typescript
 import { BareHttp, logMe } from 'barehttp';
 
-const app = new BareHttp({ logging: false });
+const app = new BareHttp();
 
 app.get({
   route: '/route',
@@ -88,7 +88,7 @@ app.start((address) => {
 ```typescript
 import { BareHttp, logMe } from 'barehttp';
 
-const app = new BareHttp({ logging: false });
+const app = new BareHttp({ logging: true });
 
 app.get({
   route:'/route',
