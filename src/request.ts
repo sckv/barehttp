@@ -8,6 +8,7 @@ import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/coo
 
 import { types } from 'util';
 import { Writable } from 'stream';
+import url from 'url';
 
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
@@ -44,6 +45,7 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
 export class BareRequest {
   ID: { code: string };
   params: { [k: string]: string | undefined } = {};
+  query: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;
   requestHeaders: { [key: string]: any };
@@ -71,6 +73,12 @@ export class BareRequest {
     this.contentType = this._originalRequest.headers['content-type'] as any;
     this.requestHeaders = this._originalRequest.headers;
 
+    // this is a placeholder URL base that we need to make class working
+    new url.URL(`http://localhost/${this._originalRequest.url}`).searchParams.forEach(
+      (value, name) => (this.query[name] = value),
+    );
+
+    // parsed;
     _originalRequest['flow'] = this; // to receive flow object later on in the route handler
 
     this.setHeaders({
