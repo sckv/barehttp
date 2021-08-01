@@ -1,4 +1,4 @@
-export const JSONStringify = (data: any) => {
+export const JSONStringify = (data: any): string | null => {
   try {
     return JSON.stringify(data);
   } catch (e) {
@@ -7,7 +7,7 @@ export const JSONStringify = (data: any) => {
   }
 };
 
-export const JSONParse = (data: any) => {
+export const JSONParse = <R = any>(data: any): R | null => {
   try {
     return JSON.parse(data);
   } catch (e) {

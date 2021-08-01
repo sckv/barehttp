@@ -1,0 +1,192 @@
+import Client, { MessageEvent, OPEN, Server as WServer, ServerOptions } from 'ws';
+import callsites from 'callsites';
+import hyperid from 'hyperid';
+
+import { logMe } from './logger';
+import { JSONParse, JSONStringify } from './utils';
+
+import { IncomingMessage, Server } from 'http';
+import { Socket } from 'net';
+
+const generateId = hyperid();
+
+type AuthAccess<T> = { access: boolean; message?: string; client?: T };
+export type WsMessageHandler<D = any, UC = any, M = any> = (
+  data: D,
+  client: UC,
+  _ws: ClientWS<UC>,
+  _event: MessageEvent,
+) => Promise<M> | M;
+
+type ClientWS<UC = any> = Client & { userClient: UC };
+
+export class WebSocketServer {
+  _internal!: WServer;
+
+  #httpServer: Server;
+  #types: Map<string, { loc: string; handler: WsMessageHandler<any, any, any> }> = new Map();
+
+  private customUpgradeDone = false;
+
+  constructor(server: Server, private opts: ServerOptions = {}) {
+    this.#httpServer = server;
+  }
+
+  private _start() {
+    if (!this._internal) {
+      this.#createWServer();
+    }
+  }
+
+  #createWServer(newOptions: ServerOptions = {}) {
+    const newOpts = Object.assign({}, this.opts, newOptions);
+    this._internal = new WServer(newOpts);
+    this.attachTypesHandling();
+  }
+
+  defineUpgrade<T>(fn: (request: IncomingMessage) => Promise<AuthAccess<T>> | AuthAccess<T>) {
+    if (this.customUpgradeDone) {
+      throw new Error('Cannot redeclare again a custom upgrade.');
+    }
+
+    const newOptions = Object.assign({}, this.opts, { noServer: true });
+    this.#createWServer(newOptions);
+
+    this.#httpServer.on('upgrade', (request, socket, head) => {
+      try {
+        const response = fn(request);
+        if (response instanceof Promise) {
+          response
+            .then((answer) => this.doUpgrade(answer, request, socket, head))
+            .catch((e) => this.rejectUpgrade(socket, e?.message, e));
+        } else {
+          this.doUpgrade(response, request, socket, head);
+        }
+      } catch (e) {
+        this.rejectUpgrade(socket, e?.message, e);
+      }
+    });
+
+    this.customUpgradeDone = true;
+  }
+
+  private doUpgrade(
+    answer: AuthAccess<any>,
+    request: IncomingMessage,
+    socket: Socket,
+    head: Buffer,
+  ) {
+    if (!answer.access) this.rejectUpgrade(socket, answer.message);
+    else {
+      this._internal.handleUpgrade(request, socket, head, (ws) => {
+        const userClient = {
+          secId: request.headers['sec-websocket-key'] || generateId(),
+          ...(answer.client || {}),
+        };
+
+        (ws as ClientWS).userClient = userClient;
+        this._internal.emit('connection', ws, request, userClient);
+      });
+    }
+  }
+
+  private rejectUpgrade(socket: Socket, message = 'Not Authorized', data?: any) {
+    logMe.warn(message || `Upgrade rejected for the client from ${socket.remoteAddress}`, data);
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); // TODO: enhance to be able to personalize this
+    socket.destroy();
+  }
+
+  private attachTypesHandling() {
+    this._internal.on('connection', (ws: ClientWS, _: IncomingMessage, client: any) => {
+      ws.onmessage = (event) => {
+        const decode = JSONParse<{ [k: string]: any; type: string }>(event.data);
+        if (decode === null) {
+          logMe.error('Incorrect data received from the client', {
+            data: event.data,
+            client: client ?? 'UNDEFINED_CLIENT',
+          });
+        } else if (!decode.type) {
+          logMe.error(`Data from the client does not contain 'type' field`, {
+            data: event.data,
+            client: client ?? 'UNDEFINED_CLIENT',
+          });
+        } else {
+          const procedure = this.#types.get(decode.type);
+          if (!procedure || typeof procedure.handler !== 'function') {
+            logMe.error(`There's no correct procedure for type "${decode.type}"`, {
+              data: event.data,
+              client: client ?? 'UNDEFINED_CLIENT',
+            });
+          } else {
+            try {
+              const response = procedure.handler(decode, client, ws, event);
+              if (response instanceof Promise) {
+                response
+                  .then((resolvedResponse) => {
+                    if (!resolvedResponse) return;
+                    this.send(
+                      { ws, client },
+                      JSONStringify({ type: `${decode.type}_RESPONSE`, ...resolvedResponse }),
+                    );
+                  })
+                  .catch((e) =>
+                    logMe.error(`Error working out a handler for type ${decode.type}`, {
+                      error: e,
+                      client,
+                      data: decode,
+                    }),
+                  );
+              } else {
+                if (!response) return;
+                this.send(
+                  { ws, client },
+                  JSONStringify({ type: `${decode.type}_RESPONSE`, ...response }),
+                );
+              }
+            } catch (e) {
+              logMe.error(`Error working out a handler for type ${decode.type}`, {
+                error: e,
+                client,
+                data: decode,
+              });
+            }
+          }
+        }
+      };
+    });
+  }
+
+  private send(ctx: { ws: ClientWS; client: any }, data: string | null) {
+    if (ctx.ws.readyState === OPEN) {
+      ctx.ws.send(data);
+    } else {
+      logMe.error('Could not send data for the client', { client: ctx.client });
+    }
+  }
+
+  declareReceiver<D, C = void>(type: string, handler: WsMessageHandler<D, C>) {
+    const previousDeclaration = this.#types.get(type);
+    if (previousDeclaration) {
+      throw new Error(
+        `Can not redeclare a type ${type} for the WS Server, already declared at ${previousDeclaration.loc}`,
+      );
+    }
+
+    if (typeof handler !== 'function') {
+      throw new Error(
+        `Can't declare a handler with type ${typeof handler}, should be a function with following signature: WsMessageHandler<T,?>`,
+      );
+    }
+
+    const place = callsites()[2];
+    const loc = `${place.getFileName()}:${place.getLineNumber()}:${place.getColumnNumber()}`;
+
+    this.#types.set(type, { loc, handler });
+  }
+
+  _handleCustomConnect(fn: (socket: ClientWS, request: IncomingMessage) => void) {
+    this._internal.on('connection', function (ws, request) {
+      fn(ws as ClientWS, request);
+    });
+  }
+}
