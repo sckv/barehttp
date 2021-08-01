@@ -10,15 +10,16 @@ import { Socket } from 'net';
 
 const generateId = hyperid();
 
+type UserClient = { secId: string; [k: string]: any };
 type AuthAccess<T> = { access: boolean; message?: string; client?: T };
-export type WsMessageHandler<D = any, UC = any, M = any> = (
+export type WsMessageHandler<D = any, UC extends UserClient = UserClient, M = any> = (
   data: D,
   client: UC,
   _ws: ClientWS<UC>,
   _event: MessageEvent,
 ) => Promise<M> | M;
 
-type ClientWS<UC = any> = Client & { userClient: UC };
+type ClientWS<UC extends UserClient = UserClient> = Client & { userClient: UC };
 
 export class WebSocketServer {
   _internal!: WServer;
@@ -164,7 +165,10 @@ export class WebSocketServer {
     }
   }
 
-  declareReceiver<D = any, C = any>(receiver: { type: string; handler: WsMessageHandler<D, C> }) {
+  declareReceiver<D = any, C extends UserClient = UserClient>(receiver: {
+    type: string;
+    handler: WsMessageHandler<D, C>;
+  }) {
     const previousDeclaration = this.#types.get(receiver.type);
     if (previousDeclaration) {
       throw new Error(
@@ -184,9 +188,34 @@ export class WebSocketServer {
     this.#types.set(receiver.type, { loc, handler: receiver.handler });
   }
 
-  _handleCustomConnect(fn: (socket: ClientWS, request: IncomingMessage) => void) {
-    this._internal.on('connection', function (ws, request) {
-      fn(ws as ClientWS, request);
-    });
+  getClientById<T extends UserClient>(id: string) {
+    for (const client of this._internal.clients.values()) {
+      if ((client as ClientWS).userClient.secId === id) {
+        return client as ClientWS<T>;
+      }
+    }
+  }
+
+  getClientByCriteria<T extends UserClient>(
+    criteria: string,
+    value: any,
+    criteriaFunction?: (client: ClientWS<T>) => boolean,
+  ) {
+    for (const client of this._internal.clients.values()) {
+      if (typeof criteriaFunction === 'function') {
+        if (criteriaFunction(client as ClientWS<T>)) {
+          return client;
+        }
+      }
+      if ((client as ClientWS).userClient[criteria] === value) {
+        return client as ClientWS<T>;
+      }
+    }
+  }
+
+  handleManualConnect<T extends UserClient>(
+    fn: (socket: ClientWS<T>, client: T) => Promise<void> | void,
+  ) {
+    this._internal.on('connection', (ws, _, client) => fn(ws, client));
   }
 }
