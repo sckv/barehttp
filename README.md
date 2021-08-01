@@ -345,13 +345,21 @@ Imperatively disables cache, does the same as `disableCache: true` in `RouteOpti
 
 Imperatively sets the cache, does the same as `cache: CacheOptions` in `RouteOptions`
 
+### `addHeader` (Function)
+
+Adds a header outgoing header string as a (key, value) `addHeader(header, value)`. Can **not** overwrite.
+
+### `addHeaders` (Function)
+
+Adds outgoing headers in a "batch", merges provided headers object `{ [header: string]: value }` to already existing headers. Can **not** overwrite.
+
 ### `setHeader` (Function)
 
-Set outgoing header as a (key, value) arguments `setHeader(header, value)`. Can overwrite
+Does the same as `addHeader` but overrides the value.
 
 ### `setHeaders` (Function)
 
-Set outgoing headers in a "batch", merges provided headers object `{ [header: string]: value }` to already existing headers. Can overwrite
+Does the same as `addHeaders` but overrides the value.
 
 ### `status` (Function)
 

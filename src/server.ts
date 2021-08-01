@@ -283,7 +283,7 @@ export class BareServer<A extends IP> {
 
   private registerReport() {
     this.setRoute('GET', '/_report', false, (flow) => {
-      flow.setHeader('content-type', 'text/html');
+      flow.setHeader('Content-Type', 'text/html');
       flow.send(generateReport(this.#routes));
     });
   }
