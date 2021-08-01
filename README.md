@@ -283,8 +283,13 @@ This is the main 'handler' function for any kind of Client request. If there's a
 Code Example:
 
 ```ts
-app.ws?.declareReceiver<{ ok: string }>('BASE.TYPE', async (data, client) => {
-  return { prop: 'some cool answer', client };
+app.ws?.declareReceiver<{ ok: string }>({
+  type: 'BASE_TYPE',
+  handler: async (data, client) => {
+    // do your async or sync operations here
+    // return the response if you need to send an answer
+    return { cool: 'some answer', client };
+  },
 });
 ```
 

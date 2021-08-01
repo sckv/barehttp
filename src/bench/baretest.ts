@@ -11,9 +11,12 @@ brt.get({
 
 let clt = 0;
 
-brt.ws?.declareReceiver<{ ok: string }, number>('BASE.TYPE', async (data, client) => {
-  console.log({ data });
-  return { cool: 'some answer', client };
+brt.ws?.declareReceiver<{ ok: string }>({
+  type: 'BASE.TYPE',
+  handler: async (data, client) => {
+    console.log({ data });
+    return { cool: 'some answer', client };
+  },
 });
 
 brt.ws?.defineUpgrade(async (req) => {
