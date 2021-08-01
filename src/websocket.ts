@@ -34,13 +34,13 @@ export class WebSocketServer {
 
   private _start() {
     if (!this._internal) {
-      this.#createWServer();
+      this.#createWServer({ server: this.#httpServer });
     }
   }
 
   #createWServer(newOptions: ServerOptions = {}) {
-    const newOpts = Object.assign({}, this.opts, newOptions);
-    this._internal = new WServer(newOpts);
+    const opts = Object.assign({}, this.opts, newOptions);
+    this._internal = new WServer(opts);
     this.attachTypesHandling();
   }
 
@@ -164,24 +164,24 @@ export class WebSocketServer {
     }
   }
 
-  declareReceiver<D, C = void>(type: string, handler: WsMessageHandler<D, C>) {
-    const previousDeclaration = this.#types.get(type);
+  declareReceiver<D = any, C = any>(receiver: { type: string; handler: WsMessageHandler<D, C> }) {
+    const previousDeclaration = this.#types.get(receiver.type);
     if (previousDeclaration) {
       throw new Error(
-        `Can not redeclare a type ${type} for the WS Server, already declared at ${previousDeclaration.loc}`,
+        `Can not redeclare a type ${receiver.type} for the WS Server, already declared at ${previousDeclaration.loc}`,
       );
     }
 
-    if (typeof handler !== 'function') {
+    if (typeof receiver.handler !== 'function') {
       throw new Error(
-        `Can't declare a handler with type ${typeof handler}, should be a function with following signature: WsMessageHandler<T,?>`,
+        `Can't declare a handler with type ${typeof receiver.handler}, should be a function with following signature: WsMessageHandler<T,?>`,
       );
     }
 
     const place = callsites()[2];
     const loc = `${place.getFileName()}:${place.getLineNumber()}:${place.getColumnNumber()}`;
 
-    this.#types.set(type, { loc, handler });
+    this.#types.set(receiver.type, { loc, handler: receiver.handler });
   }
 
   _handleCustomConnect(fn: (socket: ClientWS, request: IncomingMessage) => void) {
