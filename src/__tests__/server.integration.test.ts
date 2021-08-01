@@ -61,6 +61,22 @@ test('Enables context in the settings', async () => {
   expect(data).toBeTruthy();
 });
 
+test('Automatically parses query parameters in the route call', async () => {
+  const app = new BareHttp();
+
+  const spyQuery = jest.fn();
+  app.get({
+    route: '/test',
+    handler: (flow) => spyQuery(flow.query),
+  });
+
+  await app.start();
+  await axios.get('http://localhost:3000/test?query=params&chained=ok');
+  await app.stop();
+
+  expect(spyQuery).toHaveBeenCalledWith({ query: 'params', chained: 'ok' });
+});
+
 test('Enables cookies decoding in the settings', async () => {
   const app = new BareHttp({ cookies: true });
   const spyCookies = jest.fn();

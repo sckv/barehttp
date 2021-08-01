@@ -1,5 +1,5 @@
 import Router from 'find-my-way';
-import { Server as WServer, ServerOptions } from 'ws';
+import { ServerOptions } from 'ws';
 
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
@@ -14,6 +14,7 @@ import {
   StatusCodesUnion,
 } from './utils';
 import { Cors, CorsOptions } from './middlewares/cors/cors';
+import { WebSocketServer } from './websocket';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -76,7 +77,7 @@ type BareOptions<A extends IP> = {
    */
   ws?: boolean;
   wsOptions?: Omit<ServerOptions, 'host' | 'port' | 'server' | 'noServer'> & {
-    closeHandler?: (server: WServer) => Promise<void>;
+    closeHandler?: (server: WebSocketServer) => Promise<void>;
   };
   /**
    * Enable Cors
@@ -112,7 +113,7 @@ export type ServerMergedType = {
 
 export class BareServer<A extends IP> {
   server: Server;
-  ws?: WServer;
+  ws?: WebSocketServer;
 
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
@@ -184,9 +185,7 @@ export class BareServer<A extends IP> {
 
     // ws attachment
     if (bo.ws) {
-      const wsOpts = { server: this.server };
-      if (bo.wsOptions) Object.assign(wsOpts, bo.wsOptions);
-      this.ws = new WServer(wsOpts);
+      this.ws = new WebSocketServer(this.server, bo.wsOptions);
     }
 
     // middlewares settings
@@ -361,7 +360,7 @@ export class BareServer<A extends IP> {
       await this.bareOptions.wsOptions.closeHandler(this.ws);
     }
 
-    this.ws.close();
+    this.ws._internal.close();
   }
 
   private attachGracefulHandlers() {
@@ -465,6 +464,7 @@ export class BareServer<A extends IP> {
 
   start(cb?: (address: string) => void) {
     this.#writeMiddlewares();
+    this.ws?.['_start']();
     return new Promise<void>((res) =>
       // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
       this.server.listen(this.#port, this.#host, undefined, () => {

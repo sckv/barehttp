@@ -49,7 +49,7 @@ yarn add barehttp
 ```typescript
 import { BareHttp, logMe } from 'barehttp';
 
-const app = new BareHttp({ logging: false });
+const app = new BareHttp();
 
 app.get({
   route: '/route',
@@ -88,7 +88,7 @@ app.start((address) => {
 ```typescript
 import { BareHttp, logMe } from 'barehttp';
 
-const app = new BareHttp({ logging: false });
+const app = new BareHttp({ logging: true });
 
 app.get({
   route:'/route',
@@ -186,12 +186,16 @@ Default `false`
 
 Exposes a basic report with the routes usage under `GET /_report` route
 
-### `BareServer.use` ((flow: BareRequest) => Promise<void> | void)
+---
+
+## `BareServer.use` ((flow: BareRequest) => Promise<void> | void)
 
 Attach a middleware `after` the middlewares optional array.
 The order of the middlewares is followed by code declarations order.
 
-### `BareServer.get | post | patch | put | delete | options | head | declare` (Function)
+---
+
+## `BareServer.get | post | patch | put | delete | options | head | declare` (Function)
 
 To set a route for `get | post | patch | put | delete | options | head` with following parameters:
 
@@ -219,7 +223,7 @@ app.declare({
 });
 ```
 
-### `BareServer.runtimeRoute.get | post | patch | put | delete | options | head | declare` (Function)
+## `BareServer.runtimeRoute.get | post | patch | put | delete | options | head | declare` (Function)
 
 Same as the above routes API, but you can only declare them when the server is `listening`
 
@@ -241,10 +245,6 @@ app.runtimeRoute
   });
 ```
 
-### `BareServer.ws` (WebSocketServer)
-
-Refer to [external WebSocketServer](https://github.com/websockets/ws#external-https-server) for documentation.
-
 #### `RouteOptions` (Object)
 
 If set, provide per-route options for behavior handling
@@ -260,6 +260,54 @@ If set, provides a granular cache headers handling per route.
 ##### `timeout?` (Number)
 
 Request timeout value in `ms`. This will cancel the request _only_ for this route if time expired
+
+---
+
+## `BareServer.ws?` (WebSocketServer)
+
+Based on `ws` package, for internals please refer to [external WebSocketServer](https://github.com/websockets/ws#external-https-server) for documentation.
+
+This particular implementation works out easily for WebSockets interaction for pushing data to server from the clients and waiting for some answer in async.
+
+Also exposes an way to keep pushing messages to the Client from the Server on server handle through internal clients list. (WIP optimizing this)
+
+### `WebSocketServer.declareReceiver` ((Data, UserClient, WSClient, MessageEvent) => Promise\<M> | M)
+
+This is the main 'handler' function for any kind of Client request. If there's a response to that push from the client the return should contain it, otherwise if the response is `void` there will be no answer to the client side.
+
+- `Data`: is the data received from the client for this exact `Type`
+- `UserClient`: is an optional client defined on the stage of `Upgrade` to provide some closured client data to be able to know what Client is exactly making the request to the Server
+- `WSClient`: raw instance of `ws.Client & { userClient: UC }`
+- `MessageEvent`: raw instance of `ws.MessageClient`
+
+Code Example:
+
+```ts
+app.ws?.declareReceiver<{ ok: string }>({
+  type: 'BASE_TYPE',
+  handler: async (data, client) => {
+    // do your async or sync operations here
+    // return the response if you need to send an answer
+    return { cool: 'some answer', client };
+  },
+});
+```
+
+### `WebSocketServer.defineUpgrade` ((IncomingRequest) => Promise\<M> | M)
+
+To de able to handle authorization or any other previous operation before opening and upgrading an incoming client's request.
+**If this function is not initialized with the callback, all incoming connections will be accepted by default**
+
+```ts
+app.ws?.defineUpgrade(async (req) => {
+  // you can do some async or sync operation here
+  // the returning of this function will be
+  // defined as the `UserClient` and attached to the `ws.Client` instance
+  return { access: true, client: {...properties of the client} };
+});
+```
+
+---
 
 ## `BareRequest` (Class)
 
@@ -332,6 +380,7 @@ Some of the features are in progress.
 - [x] Request wide context storage and incorporated tracing (ready for cloud)
 - [x] UID (adopted or generated)
 - [x] WebSocket server exposure
+- [x] handy WebSocket interaction tools, for authorization, etc.
 - [x] Request-Processing-Time header and value
 - [x] Promised or conventional middlewares
 - [x] Logging and serialized with `pino`
@@ -342,6 +391,13 @@ Some of the features are in progress.
 - [x] Request execution cancellation by timeout
 - [x] Bulk/chaining routes declaration
 - [x] Runtime routes hot swapping
+- [ ] middlewares per route
+- [ ] swagger OpenAPI 3.0 on `/docs` endpoint
+- [ ] swagger OpenAPI 3.0 scheme on `/docs_raw` endpoint
+- [ ] optional export of generated schema to a location (yaml, json)
+- [ ] streaming/receiving of chunked multipart
+- [ ] runtime validation schema generation per route response types (on project compile/on launch)
+- [ ] runtime route params or query validation upon declared types (on project compile/on launch)
 
 ## Benchmarks
 
