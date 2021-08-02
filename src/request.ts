@@ -106,19 +106,25 @@ export class BareRequest {
   }
 
   private readBody() {
-    if (['POST', 'PATCH', 'PUT'].includes(this._originalRequest.method!))
-      return new Promise<void>((resolve, reject) => {
-        const temp: any = [];
-        this._originalRequest
-          .on('data', (chunk) => temp.push(chunk))
-          .on('end', () => {
-            const parsed = this.classifyRequestBody(temp);
-            if (types.isNativeError(parsed)) reject(parsed);
-            this.requestBody = parsed;
-            resolve();
-          })
-          .on('error', reject);
-      });
+    switch (this._originalRequest.method) {
+      case 'POST':
+      case 'PATCH':
+      case 'PUT':
+        return new Promise<any>((resolve, reject) => {
+          const temp: any = [];
+          this._originalRequest
+            .on('data', (chunk) => temp.push(chunk))
+            .on('end', () => {
+              const parsed = this.classifyRequestBody(temp);
+              if (types.isNativeError(parsed)) return reject(parsed);
+              this.requestBody = parsed;
+              resolve(parsed);
+            })
+            .on('error', reject);
+        });
+      default:
+        return;
+    }
   }
 
   private attachCookieManager(opts?: CookiesManagerOptions) {
@@ -155,8 +161,6 @@ export class BareRequest {
   }
 
   private setRequestTime() {
-    if (!this.requestTimeFormat) return;
-
     const diff = process.hrtime(this.startTime);
 
     const time =
@@ -277,14 +281,6 @@ export class BareRequest {
 
     this.sent = true;
 
-    let toSend = chunk;
-    switch (chunk?.constructor) {
-      case Uint16Array:
-      case Uint8Array:
-      case Uint32Array:
-        toSend = Buffer.from((chunk as any).buffer);
-    }
-
     // work basic headers
     if (typeof chunk !== 'undefined' && chunk !== null)
       this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
@@ -295,15 +291,11 @@ export class BareRequest {
     if (this.statusToSend >= 400 && this.statusToSend !== 404 && this.statusToSend !== 410)
       this.cleanHeader('Cache-Control');
 
-    this.setRequestTime();
+    if (this.requestTimeFormat) this.setRequestTime();
 
     // perform sending
-    this._originalResponse.writeHead(
-      this.statusToSend,
-      statusTuples[this.statusToSend],
-      this.headers,
-    );
-    this._originalResponse.end(toSend);
+    this._originalResponse.writeHead(this.statusToSend, '', this.headers);
+    this._originalResponse.end(chunk || statusTuples[this.statusToSend]);
   }
 
   send(anything?: any) {
@@ -314,6 +306,8 @@ export class BareRequest {
       case Uint8Array:
       case Uint16Array:
       case Uint32Array:
+        this._send(Buffer.from((anything as any).buffer));
+        break;
       case Buffer:
       case String:
         this._send(anything);
@@ -321,6 +315,7 @@ export class BareRequest {
       case Boolean:
       case Number:
         this._send('' + anything);
+        break;
       case Writable:
         this.stream(anything);
         break;
