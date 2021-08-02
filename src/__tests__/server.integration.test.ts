@@ -3,49 +3,6 @@ import axios from 'axios';
 import { context } from '../context';
 import { BareHttp } from '../server';
 
-test('Enables statistics report', async () => {
-  const app = new BareHttp({ statisticsReport: true });
-  await app.start();
-
-  const { data } = await axios.get('http://localhost:3000/_report');
-  await app.stop();
-
-  expect(data).toContain(
-    '<!DOCTYPE html><html><head><title>Routes usage</title><meta charset="utf-8"></head>',
-  );
-});
-
-test('Statistics report sum up with a route hit', async () => {
-  const app = new BareHttp({ statisticsReport: true });
-  await app.start();
-
-  await axios.get('http://localhost:3000/_report');
-  const { data } = await axios.get('http://localhost:3000/_report');
-  await app.stop();
-
-  expect(data).toContain('<td>GET?/_report</td><td>2</td>');
-});
-
-test('Statistics report sum up with a route fail hit', async () => {
-  const app = new BareHttp({ statisticsReport: true });
-  app.get({
-    route: '/test',
-    handler: () => {
-      throw new Error();
-    },
-  });
-
-  await app.start();
-
-  try {
-    await axios.get('http://localhost:3000/test');
-  } catch (e) {}
-  const { data } = await axios.get('http://localhost:3000/_report');
-  await app.stop();
-
-  expect(data).toContain('<td>GET?/test</td><td>1</td><td>0</td><td>1</td>');
-});
-
 test('Enables context in the settings', async () => {
   const app = new BareHttp({ context: true });
 
@@ -147,7 +104,7 @@ test('Base x-processing-time is in seconds', async () => {
 });
 
 test('Check that app started at the indicated port', async () => {
-  const app = new BareHttp({ serverPort: 9999, statisticsReport: true });
+  const app = new BareHttp({ serverPort: 9999 });
 
   await app.start();
   const { status } = await axios.get('http://localhost:9999/_report');
