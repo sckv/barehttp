@@ -4,7 +4,6 @@ import { ServerOptions } from 'ws';
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
-import { generateReport } from './report';
 import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
 import {
   HttpMethods,

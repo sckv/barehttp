@@ -64,7 +64,9 @@ export class WebSocketServer {
           this.doUpgrade(response, request, socket, head);
         }
       } catch (e) {
-        this.rejectUpgrade(socket, e?.message, e);
+        if (e instanceof Error) {
+          this.rejectUpgrade(socket, e?.message, e);
+        }
       }
     });
 
