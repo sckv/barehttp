@@ -57,6 +57,7 @@ export class BareRequest {
   private startTime?: [seconds: number, nanoseconds: number];
   private startDate = new Date();
   private remoteClient = '';
+  private logging = false;
   private requestTimeFormat?: 'ms' | 's';
   private headers: { [header: string]: string | string[] } = {};
   private cookies: { [cooke: string]: string } = {};
@@ -72,6 +73,7 @@ export class BareRequest {
     this.remoteIp = _originalRequest.socket.remoteAddress;
     this.contentType = this._originalRequest.headers['content-type'] as any;
     this.requestHeaders = this._originalRequest.headers;
+    this.logging = options?.logging ?? false;
 
     // this is a placeholder URL base that we need to make class working
     new url.URL(`http://localhost/${this._originalRequest.url}`).searchParams.forEach(
@@ -89,19 +91,6 @@ export class BareRequest {
     if (options?.requestTimeFormat) {
       this.startTime = process.hrtime();
       this.requestTimeFormat = options.requestTimeFormat;
-    }
-
-    // call logging section
-    if (options?.logging === true) {
-      _originalResponse.on('close', () =>
-        logHttp(
-          this.headers,
-          this.startDate,
-          this.remoteClient,
-          _originalRequest,
-          _originalResponse,
-        ),
-      );
     }
   }
 
@@ -296,6 +285,17 @@ export class BareRequest {
     // perform sending
     this._originalResponse.writeHead(this.statusToSend, '', this.headers);
     this._originalResponse.end(chunk || statusTuples[this.statusToSend]);
+
+    // call logging section
+    if (this.logging === true) {
+      logHttp(
+        this.headers,
+        this.startDate,
+        this.remoteClient,
+        this._originalRequest,
+        this._originalResponse,
+      );
+    }
   }
 
   send(anything?: any) {

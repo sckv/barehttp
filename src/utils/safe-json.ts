@@ -10,7 +10,7 @@ export const JSONStringify = (data: any): string | null => {
 export const JSONParse = <R = any>(data: any): R | null => {
   try {
     return JSON.parse(data);
-  } catch (e) {
+  } catch (e: any) {
     console.log('Error parsing, data not deserializable', e);
     return e;
   }

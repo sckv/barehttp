@@ -1,11 +1,11 @@
 import { BareHttp } from '../index';
 
-const brt = new BareHttp();
+const brt = new BareHttp({ logging: true });
 
 brt.get({
   route: '/myroute',
   handler: (flow) => {
-    flow._send();
+    flow.json({ ping: 'pong' });
   },
 });
 
