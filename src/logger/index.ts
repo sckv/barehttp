@@ -17,26 +17,6 @@ const pinoCommonOptions = {
 
 const logger = pino(pinoCommonOptions, asyncDest[0]);
 
-if (envs.isProd) {
-  setInterval(function () {
-    logger.flush();
-  }, 10000).unref();
-
-  const handler = pino.final(logger, (err, finalLogger, evt) => {
-    finalLogger.info(`${evt} caught`);
-    if (err) finalLogger.error(err, 'error caused exit');
-    process.exit(err ? 1 : 0);
-  });
-
-  // catch all the ways node might exit
-  process.on('beforeExit', () => handler(null, 'beforeExit'));
-  process.on('exit', () => handler(null, 'exit'));
-  process.on('uncaughtException', (err) => handler(err, 'uncaughtException'));
-  process.on('SIGINT', () => handler(null, 'SIGINT'));
-  process.on('SIGQUIT', () => handler(null, 'SIGQUIT'));
-  process.on('SIGTERM', () => handler(null, 'SIGTERM'));
-}
-
 interface LogMeFn {
   (obj: unknown, ...args: []): void;
   (msg: string, ...args: any[]): void;

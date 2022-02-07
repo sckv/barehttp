@@ -39,7 +39,7 @@ test('Statistics report sum up with a route fail hit', async () => {
 
   try {
     await axios.get('http://localhost:3000/test');
-  } catch (e) {}
+  } catch (e: any) {}
   const { data } = await axios.get('http://localhost:3000/_report');
   await app.stop();
 
