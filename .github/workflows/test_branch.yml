@@ -2,7 +2,7 @@ name: Test branch or PR
 on:
   pull_request:
     branches:
-      - 'master'
+      - master
 jobs:
   testlint:
     name: Test and Lint
