@@ -43,6 +43,8 @@
     "ws": "^8.3.0"
   },
   "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^8.0.2",
     "@ts-morph/bootstrap": "^0.12.2",
     "@types/cookie": "^0.4.1",
     "@types/cookie-signature": "^1.0.3",
