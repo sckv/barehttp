@@ -2,7 +2,7 @@ name: Test branch or PR
 on:
   pull_request:
     branches:
-      - 'master'
+      - master
 jobs:
   testlint:
     name: Test and Lint
@@ -17,8 +17,8 @@ jobs:
         with:
           node-version: 14.15.1
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --frozen-lockfile
       - name: Lint code
-        run: npm run lint
+        run: yarn lint
       - name: Run tests
-        run: npm test
+        run: yarn test
