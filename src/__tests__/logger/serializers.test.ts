@@ -78,7 +78,7 @@ describe('logger - common logger serializer', () => {
     expect(serializeLog('just log message')).toEqual({
       location: expect.any(String),
       logger: {
-        method_name: 'asyncJestTest',
+        method_name: expect.any(String),
         name: 'pino',
         version: 'v1.0.0',
       },
@@ -92,7 +92,7 @@ describe('logger - common logger serializer', () => {
     expect(serializeLog('just log message', { obj: 'to_log' })).toEqual({
       location: expect.any(String),
       logger: {
-        method_name: 'asyncJestTest',
+        method_name: expect.any(String),
         name: 'pino',
         version: 'v1.0.0',
       },
@@ -107,7 +107,7 @@ describe('logger - common logger serializer', () => {
     expect(serializeLog({ obj: 'to_log', anotherKey: 9839485 })).toEqual({
       location: expect.any(String),
       logger: {
-        method_name: 'asyncJestTest',
+        method_name: expect.any(String),
         name: 'pino',
         version: 'v1.0.0',
       },
@@ -124,7 +124,7 @@ describe('logger - common logger serializer', () => {
     ).toEqual({
       location: expect.any(String),
       logger: {
-        method_name: 'asyncJestTest',
+        method_name: expect.any(String),
         name: 'pino',
         version: 'v1.0.0',
       },
@@ -142,7 +142,7 @@ describe('logger - common logger serializer', () => {
     expect(serializeLog(customError)).toEqual({
       location: expect.any(String),
       logger: {
-        method_name: 'asyncJestTest',
+        method_name: expect.any(String),
         name: 'pino',
         version: 'v1.0.0',
       },
@@ -164,7 +164,7 @@ describe('logger - common logger serializer', () => {
     expect(serializeLog('message for the log', customError)).toEqual({
       location: expect.any(String),
       logger: {
-        method_name: 'asyncJestTest',
+        method_name: expect.any(String),
         name: 'pino',
         version: 'v1.0.0',
       },
