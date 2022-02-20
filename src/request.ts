@@ -9,7 +9,6 @@ import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/coo
 import { types } from 'util';
 import { Writable } from 'stream';
 import url from 'url';
-
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
 
@@ -42,13 +41,13 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-export class BareRequest {
+export class BareRequest<P = { [k: string]: string | undefined }> {
   ID: { code: string };
-  params: { [k: string]: string | undefined } = {};
+  params: P = {} as P;
   query: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;
-  requestHeaders: { [key: string]: any };
+  requestHeaders: { [key: string]: any } = {};
   statusToSend = 200;
   cm?: CookiesManager;
   sent = false;
@@ -122,7 +121,7 @@ export class BareRequest {
   }
 
   private attachCookieManager(opts?: CookiesManagerOptions) {
-    this.cm = new CookiesManager(opts, this);
+    this.cm = new CookiesManager(opts, this as any);
   }
 
   private populateCookies() {
@@ -184,7 +183,7 @@ export class BareRequest {
   }
 
   private setParams(params: { [k: string]: string | undefined }) {
-    this.params = params;
+    this.params = params as any;
   }
 
   // ======== PUBLIC APIS ========

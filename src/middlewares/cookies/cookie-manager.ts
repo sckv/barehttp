@@ -3,7 +3,6 @@ import cookie from 'cookie';
 import { secretsOperator } from './signer';
 
 import { logMe } from '../../logger';
-
 import type { BareRequest } from '../../request';
 
 export type CookiesManagerOptions = cookie.CookieSerializeOptions & {

@@ -20,7 +20,7 @@ import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 
 type Middleware = (flow: BareRequest) => Promise<void> | void;
-type Handler = (flow: BareRequest) => any;
+type Handler<P> = (flow: BareRequest<P>) => any;
 type ErrorHandler = (err: any, flow: BareRequest, status?: StatusCodesUnion) => void;
 
 type IP = `${number}.${number}.${number}.${number}`;
@@ -85,26 +85,50 @@ type BareOptions<A extends IP> = {
   cors?: boolean | CorsOptions;
 };
 
-interface HandlerExposed<K> {
-  <R extends `/${string}`, C>(
+// === utility types for params inference
+
+type Split<S extends string, D extends string> = string extends S
+  ? string[]
+  : S extends ''
+  ? []
+  : S extends `${infer T}${D}${infer U}`
+  ? [...Split<T, '/'>, ...Split<U, D>]
+  : [S];
+
+type StringArrayToObject<S> = S extends [infer F, ...infer U]
+  ? F extends keyof any
+    ? { [K in F]: string } & StringArrayToObject<U>
+    : any
+  : {};
+
+type RemoveFirst<S extends string[]> = S extends [infer F, ...infer X]
+  ? X extends string[]
+    ? StringArrayToObject<X>
+    : 'ok'
+  : never;
+
+// === utility types ===
+
+interface HandlerExposed<K, T> {
+  <R extends string, C>(
     setUp: K extends 'declare'
       ? {
-          route: R;
+          route: `/${R}`;
           options?: RouteOpts<C>;
-          handler: Handler;
+          handler: Handler<Split<R, ':'>>;
           methods: Array<HttpMethodsUnion>;
         }
       : {
-          route: R;
+          route: `/${R}`;
           options?: RouteOpts<C>;
-          handler: Handler;
+          handler: Handler<RemoveFirst<Split<R, ':'>>>;
         },
   ): BareServer<any> & Routes;
 }
 
 export type RouteReport = { hits: number; success: number; fails: number };
 export type Routes = {
-  [K in HttpMethodsUnion | 'declare']: HandlerExposed<K>;
+  [K in HttpMethodsUnion | 'declare']: HandlerExposed<K, any>;
 };
 export type BareHttpType<A extends IP = any> = BareServer<A> & Routes;
 export type ServerMergedType = {
@@ -254,7 +278,7 @@ export class BareServer<A extends IP> {
     method: HttpMethodsUnionUppercase,
     route: string,
     runtime: boolean,
-    handler: Handler,
+    handler: Handler<any>,
     opts?: RouteOpts<any>,
   ) {
     const encode = this.encodeRoute(method, route);
@@ -291,7 +315,7 @@ export class BareServer<A extends IP> {
   private handleRoute(
     req: IncomingMessage,
     routeParams: { [k: string]: string | undefined },
-    handle: Handler,
+    handle: Handler<any>,
     encodedRoute: string,
     opts?: RouteOpts<any>,
   ) {

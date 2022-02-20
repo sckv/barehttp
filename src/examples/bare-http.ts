@@ -17,7 +17,7 @@ const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
 app
   .get({
-    route: '/route',
+    route: '/route/:fine/:salome',
     options: { timeout: 2000 },
     handler: async (flow) => {
       flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
