@@ -26,9 +26,11 @@ const returning: SomeReturning = {
   kek: { haha: 123123 },
   otherUnion: 1233232,
   generical: { prop: false },
+  justArray: [],
 };
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
+
 app.route.get({
   route: '/route',
   options: { timeout: 2000 },
@@ -57,7 +59,7 @@ app
     return;
   });
 
-console.log(app.getRoutes());
+// console.log(app.getRoutes());
 
 app.start((address) => {
   console.log(`BareHttp started at ${address}`);
