@@ -2,6 +2,7 @@ import { ClassMemberTypes, Node, Project, SyntaxList, ts, Type } from 'ts-morph'
 
 import { generateCustomSchema } from './custom-schema';
 import { isFinalType, logInternals } from './helpers';
+import { convertToJsonSchema } from './json-schema';
 
 const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
 project.enableLogging();
@@ -133,8 +134,9 @@ const getReturnStatements = (n?: SyntaxList | Node<ts.Node>) => {
     .map((v) => v!.getType());
 };
 
-logInternals(returnFinder('examples', tp));
+// logInternals(returnFinder('examples', tp));
 
+// logInternals(returnFinder('examples', tp).map((s) => convertToJsonSchema(s)));
 // console.log(tp);
 // logInternals(getReturnStatements(res!)?.map((t) => regenerateTypeSchema(t!)));
 
