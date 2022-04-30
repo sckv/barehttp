@@ -79,7 +79,7 @@ export type ObjectSchemaType = {
 
 export type UnionSchemaType = {
   type: 'union';
-  oneOf: CustomSchema[];
+  anyOf: CustomSchema[];
   nullable: boolean;
 };
 

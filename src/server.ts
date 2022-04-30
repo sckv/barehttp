@@ -338,7 +338,9 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     return [...this.#routes.keys()];
   }
 
-  get route() {
+  get route(): Readonly<{
+    [K in keyof typeof HttpMethods]: HandlerExposed;
+  }> {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return new Proxy(
@@ -363,11 +365,7 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
           return self;
         },
       },
-    ) as Readonly<
-      {
-        [K in keyof typeof HttpMethods]: HandlerExposed;
-      }
-    >;
+    ) as any;
   }
 }
 
