@@ -1,14 +1,7 @@
 import { ClassMemberTypes, Node, Project, SyntaxList, ts, Type } from 'ts-morph';
-import find from 'lodash/find';
 
-import {
-  getApparentTypeName,
-  getTypeGenericText,
-  helpers,
-  isFinalType,
-  isNullType,
-  logInternals,
-} from './helpers';
+import { generateCustomSchema } from './custom-schema';
+import { isFinalType, logInternals } from './helpers';
 
 const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
 project.enableLogging();
@@ -16,65 +9,6 @@ project.enableLogging();
 const sourceFile = project.getSourceFile('server.ts');
 
 const tp = sourceFile?.getClass('BareServer')?.getMember('route');
-
-const regenerateTypeSchema = (t: Type<ts.Type>) => {
-  if (isFinalType(t)) {
-    return { type: getTypeGenericText(t) };
-  }
-
-  if (t.isUnion()) {
-    const nulled = t.getUnionTypes().some((nt) => isNullType(nt));
-    const cleanTypes = helpers.cleanNullableTypes(t.getUnionTypes());
-    let returning: { nullable?: boolean; anyOf?: any[]; type?: string } = { nullable: false };
-
-    const transformed = cleanTypes.reduce((acc, ut) => {
-      const regenerated = regenerateTypeSchema(ut);
-      if (find(acc, regenerated)) return acc;
-      return acc.concat(regenerated);
-    }, [] as any);
-
-    if (transformed.length > 1) {
-      returning.anyOf = transformed;
-    } else {
-      returning = transformed[0];
-    }
-
-    if (nulled) {
-      returning.nullable = true;
-    }
-    return returning;
-  }
-
-  if (t.isIntersection()) {
-    return t.getIntersectionTypes().reduce((acc, it) => {
-      acc = { ...acc, ...regenerateTypeSchema(it) };
-      return acc;
-    }, {} as any);
-  }
-
-  if (t.isArray()) {
-    return {
-      type: 'array',
-      items: regenerateTypeSchema(t.getArrayElementType()!),
-    };
-  }
-
-  if (t.isInterface() || t.isObject()) {
-    const result = t.getProperties().reduce(
-      (acc, ci) => {
-        const val = ci.getValueDeclaration()!;
-        acc.properties = { ...acc.properties, [ci.getName()]: regenerateTypeSchema(val.getType()) };
-        return acc;
-      },
-      { type: 'object', properties: {} } as any,
-    );
-    return result;
-  }
-
-  return {
-    type: getApparentTypeName(t),
-  };
-};
 
 function returnFinder(route: string, base?: ClassMemberTypes) {
   if (!base) {
@@ -127,7 +61,7 @@ function returnFinder(route: string, base?: ClassMemberTypes) {
     })
     .flat();
 
-  const schemas = extractedReturns.map((t) => regenerateTypeSchema(t!));
+  const schemas = extractedReturns.map((t) => generateCustomSchema(t!));
   // console.log({ extractedReturns });
 
   return schemas;
@@ -167,9 +101,9 @@ function returnFinder(route: string, base?: ClassMemberTypes) {
 //   ?.getChildSyntaxList();
 
 const getReturnStatements = (n?: SyntaxList | Node<ts.Node>) => {
-  if (!n) return [];
+  if (!n) return [] as any[];
 
-  let baseChildren = n?.getChildren() as any;
+  let baseChildren = n?.getChildren();
 
   const thereIf = baseChildren?.find((c) => c.getKind() === ts.SyntaxKind.IfStatement);
   const thereBlock = baseChildren?.find((c) => c.getKind() === ts.SyntaxKind.Block);
@@ -177,22 +111,26 @@ const getReturnStatements = (n?: SyntaxList | Node<ts.Node>) => {
   const thereFor = baseChildren?.find((c) => c.getKind() === ts.SyntaxKind.ForStatement);
 
   if (thereIf || thereBlock || thereWhile || thereFor) {
-    baseChildren = baseChildren?.concat(
-      getReturnStatements(thereIf),
-      getReturnStatements(thereWhile),
-      getReturnStatements(thereBlock),
-      getReturnStatements(thereFor),
-    );
+    baseChildren = baseChildren
+      ?.concat(
+        getReturnStatements(thereIf),
+        getReturnStatements(thereWhile),
+        getReturnStatements(thereBlock),
+        getReturnStatements(thereFor),
+      )
+      .flat();
   }
 
   return baseChildren
-    ?.filter((c) => c.getKind() === ts.SyntaxKind.ReturnStatement)
+    .filter((c) => c.getKind() === ts.SyntaxKind.ReturnStatement)
     .map((r) =>
-      r
-        .getChildren()
-        .find((c) => c.getType().isLiteral() || c.getType().isObject())
-        ?.getType(),
-    );
+      r.getChildren().find((c) => {
+        const type = c.getType();
+        return type.isObject() || isFinalType(type);
+      }),
+    )
+    .filter((v) => v)
+    .map((v) => v!.getType());
 };
 
 logInternals(returnFinder('examples', tp));

@@ -7,16 +7,20 @@ interface Ok {
 }
 
 type Cool = { okey?: boolean };
+type NotCool = { notOk: boolean; optional?: string[] };
 
 type Generic<G extends boolean = boolean> = { prop: G };
 type SomeReturning = {
   fine: string;
   justNullable?: number;
   justArray: string[];
-  generical?: Generic | number | Ok[];
+  twoDifferentObjects: Cool | NotCool;
+  mergedObjects: Cool & NotCool;
+  generical?: Generic | number | (Ok | null)[];
   justUnionArray?: (string | number)[];
   otherUnion: number | boolean;
   coolData: number | string | 'dasdas' | Ok | null;
+  strangeArray: (Cool | NotCool)[];
   kek?: Ok & Cool;
 };
 
@@ -27,7 +31,8 @@ const returning: SomeReturning = {
   otherUnion: 1233232,
   generical: { prop: false },
   justArray: [],
-};
+  strangeArray: [{ okey: true }],
+} as any;
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
