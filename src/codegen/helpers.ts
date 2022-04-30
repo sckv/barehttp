@@ -44,11 +44,13 @@ export const isFinalType = (t: Type<ts.Type>) =>
 
 export const isNullType = (t: Type<ts.Type>) => t.isNull() || t.isUndefined();
 
+type ResolvedBasicTypes = 'string' | 'number' | 'boolean' | 'array' | 'object';
+
 export const getTypeGenericText = (t: Type<ts.Type>) => {
   if (t.isStringLiteral() || t.isNumberLiteral() || t.isBooleanLiteral()) {
-    return t.getBaseTypeOfLiteralType().getText();
+    return t.getBaseTypeOfLiteralType().getText() as ResolvedBasicTypes;
   } else {
-    return t.getText();
+    return t.getText() as ResolvedBasicTypes;
   }
 };
 
