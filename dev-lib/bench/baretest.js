@@ -1,0 +1,25 @@
+'use strict';
+Object.defineProperty(exports, '__esModule', { value: true });
+const index_1 = require('../index');
+const brt = new index_1.BareHttp({ logging: false });
+brt.get({
+  route: '/myroute',
+  handler: (flow) => {
+    flow.json({ ping: 'pong' });
+  },
+});
+// let clt = 0;
+// brt.ws?.declareReceiver<{ ok: string }>({
+//   type: 'BASE_TYPE',
+//   handler: async (data, client) => {
+//     console.log({ data });
+//     return { cool: 'some answer', client };
+//   },
+// });
+// brt.ws?.defineUpgrade(async (req) => {
+//   return { access: true, client: ++clt };
+// });
+// brt.ws?.handleManualConnect((ws, client) => {
+//   console.log('connected!', ws.userClient.secId);
+// });
+brt.start(() => console.log('server started'));
