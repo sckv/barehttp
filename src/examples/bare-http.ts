@@ -1,6 +1,6 @@
 import { BareHttp } from '../index';
 
-const app = new BareHttp({ logging: false, declaredRoutesPaths: ['examples'] });
+const app = new BareHttp({ logging: false });
 
 interface Ok {
   haha: number;
@@ -40,7 +40,7 @@ const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
 app.route.get({
   route: '/route',
-  options: { timeout: 2000, runtimeCheck: { output: true } },
+  options: { timeout: 2000 },
   handler: async function (flow) {
     flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
     // await wait();

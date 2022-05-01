@@ -2,7 +2,17 @@ const fastify = require('fastify')();
 
 // Declare a route
 fastify.get('/myroute', function (request, reply) {
-  reply.send({ ping: 'pong' });
+  reply.send({
+    fine: 'fine',
+    coolData: 1123,
+    kek: { haha: null },
+    otherUnion: 1233232,
+    generical: { prop: false },
+    justArray: [],
+    strangeArray: [{ okey: true }],
+    twoDifferentObjects: { notOk: 23423423 },
+    mergedObjects: { notOk: 0, optional: [3423423] },
+  });
 });
 
 // Run the server!
