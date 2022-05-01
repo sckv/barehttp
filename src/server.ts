@@ -1,18 +1,28 @@
 import Router from 'find-my-way';
+import { ServerOptions } from 'ws';
 
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
-import { generateReport } from './report';
-import { CookieManagerOptions } from './middlewares/cookies/cookie-manager';
+import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
+import {
+  HttpMethods,
+  HttpMethodsUnion,
+  HttpMethodsUnionUppercase,
+  StatusCodes,
+  StatusCodesUnion,
+} from './utils';
+import { Cors, CorsOptions } from './middlewares/cors/cors';
+import { WebSocketServer } from './websocket';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
-import { Writable } from 'stream';
 
 type Middleware = (flow: BareRequest) => Promise<void> | void;
 type Handler = (flow: BareRequest) => any;
+type ErrorHandler = (err: any, flow: BareRequest, status?: StatusCodesUnion) => void;
 
+type IP = `${number}.${number}.${number}.${number}`;
 type RouteOpts<C> = {
   disableCache?: C extends true ? C : undefined;
   cache?: C extends true ? undefined : CacheOpts;
@@ -20,25 +30,23 @@ type RouteOpts<C> = {
    * Request timeout handler in `ms`
    */
   timeout?: number;
-};
-interface HandlerExposed {
-  <R extends `/${string}`, C>(setUp: {
-    route: R;
-    options?: RouteOpts<C>;
-    handler: Handler;
-  }): BareServer<any>;
-}
-
-type ErrorHandler = (err: any, flow: BareRequest) => void;
-
-type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
   middlewares?: Array<Middleware>;
+};
+
+type BareOptions<A extends IP> = {
+  middlewares?: Array<Middleware>;
+  /**
+   * Opt-out request body parsing (de-serialization)
+   * Default `false`
+   */
+  doNotParseBody?: boolean;
   serverPort?: number;
   /**
    * Address to bind the web server to
    * Default '0.0.0.0'
    */
   serverAddress?: A | 'localhost';
+  setRandomPort?: boolean;
   /**
    * Enable request context storage
    * Default `false`
@@ -52,7 +60,7 @@ type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
   errorHandlerMiddleware?: ErrorHandler;
   /**
    * Request time format in `seconds` or `milliseconds`
-   * Default 's' - seconds
+   * Default - disabled
    */
   requestTimeFormat?: 's' | 'ms';
   /**
@@ -60,76 +68,95 @@ type BareOptions<A extends `${number}.${number}.${number}.${number}`> = {
    * This will enable automatic cookies decoding
    */
   cookies?: boolean;
-  cookiesOptions?: CookieManagerOptions;
+  cookiesOptions?: CookiesManagerOptions;
   /**
    * Log the resolved reverse DNS first hop for remote ip of the client (first proxy)
    */
   reverseDns?: boolean;
   /**
-   * Exposes a report with the routes usage.
-   * Default `false`
+   * WebSocket server exposure
    */
-  statisticReport?: boolean;
+  ws?: boolean;
+  wsOptions?: Omit<ServerOptions, 'host' | 'port' | 'server' | 'noServer'> & {
+    closeHandler?: (server: WebSocketServer) => Promise<void>;
+  };
+  /**
+   * Enable Cors
+   */
+  cors?: boolean | CorsOptions;
 };
 
-type Methods = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD';
-const HttpMethods = {
-  get: 'GET',
-  post: 'POST',
-  put: 'PUT',
-  delete: 'DELETE',
-  patch: 'PATCH',
-  options: 'OPTIONS',
-  head: 'HEAD',
-} as const;
+interface HandlerExposed<K> {
+  <R extends `/${string}`, C>(
+    setUp: K extends 'declare'
+      ? {
+          route: R;
+          options?: RouteOpts<C>;
+          handler: Handler;
+          methods: Array<HttpMethodsUnion>;
+        }
+      : {
+          route: R;
+          options?: RouteOpts<C>;
+          handler: Handler;
+        },
+  ): BareServer<any> & Routes;
+}
 
 export type RouteReport = { hits: number; success: number; fails: number };
+export type Routes = {
+  [K in HttpMethodsUnion | 'declare']: HandlerExposed<K>;
+};
+export type BareHttpType<A extends IP = any> = BareServer<A> & Routes;
+export type ServerMergedType = {
+  new <A extends IP>(args?: BareOptions<A>): BareHttpType<A>;
+};
 
-export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
+export class BareServer<A extends IP> {
   server: Server;
+  ws?: WebSocketServer;
+
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
+  #routesLib: Map<string, any> = new Map();
   #router = Router({ ignoreTrailingSlash: true });
-  #flows: Map<string, BareRequest> = new Map();
-  #errorHandler: ErrorHandler;
+  #errorHandler: ErrorHandler = this.basicErrorHandler;
+  #corsInstance?: Cors;
+  #port = 3000;
+  #host = '0.0.0.0';
 
-  #runMiddlewaresSequence: (flow: BareRequest) => void = (_) => _;
+  #globalMiddlewaresRun: (flow: BareRequest) => void = (_) => _;
+  #routeMiddlewaresStore: Map<string, (flow: BareRequest) => void> = new Map();
 
   constructor(private bareOptions: BareOptions<A> = {}) {
     // init
     this.server = createServer(this.#listener.bind(this));
     this.attachGracefulHandlers();
-
-    // context setting
-    if (bareOptions.context) enableContext();
-
-    // middlewares settings
-    this.#errorHandler = bareOptions?.errorHandlerMiddleware || this.basicErrorHandler;
-    this.#middlewares.push(...(bareOptions?.middlewares || []));
-    if (bareOptions.statisticReport) this.registerReport();
+    this.attachRoutesDeclarator();
+    this.applyLaunchOptions();
 
     return this;
   }
 
   #listener = (request: IncomingMessage, response: ServerResponse) => {
-    const { requestTimeFormat, logging } = this.bareOptions;
-
-    const flow = new BareRequest(request, response, logging);
+    const flow = new BareRequest(request, response, this.bareOptions);
 
     // init and attach request uuid to the context
     if (this.bareOptions.context) {
       newContext('request');
-      context.current?.store.set('id', flow.uuid);
+      context.current?.store.set('id', flow.ID.code);
     }
 
-    if (requestTimeFormat) flow['setTimeFormat'](requestTimeFormat);
-
-    // listener to remove already finished flow from the memory storage
-    request.on('close', () => this.#flows.delete(flow.uuid));
-
-    // attach a flow to the flow memory storage
-    this.#flows.set(flow.uuid, flow);
-    this.applyMiddlewares(flow.uuid);
+    // execute global middlewares on the request
+    this.applyMiddlewares(flow)
+      .catch((e) => {
+        this.#errorHandler(e, flow, 400);
+      })
+      .then(() => {
+        // if middlewares sent the response back, stop here
+        if (flow.sent) return;
+        this.#router.lookup(flow._originalRequest, flow._originalResponse);
+      });
   };
 
   /**
@@ -144,24 +171,58 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
 
     if (maxOrder > 0) {
       while (order <= maxOrder - 1) {
-        lines.push(`await this.resolveMiddleware(${order}, flow);`);
+        lines.push(`if (flow.sent) return;`);
+        lines.push(`await this.resolveMiddleware(flow, ${order});`);
         order++;
       }
     }
 
     const text = lines.join('\n');
 
-    this.#runMiddlewaresSequence = new AsyncFunction('flow', text);
+    this.#globalMiddlewaresRun = new AsyncFunction('flow', text);
   };
 
-  private async applyMiddlewares(flowId: string) {
-    const flow = this.#flows.get(flowId);
-    if (!flow) {
-      throw new Error(`No flow been found for id ${flowId}, theres a sync mistake in the server.`);
+  private applyLaunchOptions = () => {
+    const { bareOptions: bo } = this;
+
+    if (bo.setRandomPort) {
+      this.#port = undefined as any;
+    } else {
+      this.#port = +(bo.serverPort || process.env.PORT || 3000);
     }
 
-    // invoke body stream consumption
-    await flow['readBody']();
+    this.#host = typeof bo.serverAddress === 'string' ? bo.serverAddress : '0.0.0.0';
+
+    // context setting
+    if (bo.context) enableContext();
+
+    // ws attachment
+    if (bo.ws) {
+      this.ws = new WebSocketServer(this.server, bo.wsOptions);
+    }
+
+    // middlewares settings
+    if (bo.errorHandlerMiddleware) {
+      this.#errorHandler = bo.errorHandlerMiddleware;
+    }
+
+    if (this.bareOptions.cors) {
+      const corsOpts = typeof this.bareOptions.cors === 'object' ? this.bareOptions.cors : {};
+      this.#corsInstance = new Cors(corsOpts);
+    }
+
+    this.#middlewares.push(...(bo.middlewares || []));
+  };
+
+  private async applyMiddlewares(flow: BareRequest) {
+    if (this.bareOptions.cors) {
+      this.resolveMiddleware(flow, 0, this.#corsInstance?.corsMiddleware.bind(this.#corsInstance));
+    }
+
+    if (this.bareOptions.doNotParseBody !== true) {
+      // invoke body stream consumption
+      await flow['readBody']();
+    }
 
     // attach cookies middleware
     if (this.bareOptions.cookies) {
@@ -176,113 +237,120 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
       flow['setRemoteClient'](remoteClient[0]);
     }
 
-    if (this.#middlewares.length) await this.#runMiddlewaresSequence(flow);
-
-    // now route the request
-    this.#router.lookup(flow._originalRequest, flow._originalResponse);
+    if (this.#middlewares.length) await this.#globalMiddlewaresRun(flow);
   }
 
   /**
    * This handler is used in async generated middlewares runtime function
    */
-  private async resolveMiddleware(order: number, flow: BareRequest) {
+  private async resolveMiddleware(flow: BareRequest, order: number, middleware?: Middleware) {
     try {
-      const response = this.#middlewares[order](flow);
+      const toExecute = middleware || this.#middlewares[order];
+      const response = toExecute(flow);
       if (response instanceof Promise) await response;
-    } catch (e) {
+    } catch (e: any) {
       this.#errorHandler(e, flow);
     }
   }
 
-  private setRoute(method: Methods, route: string, handler: Handler, opts?: RouteOpts<any>) {
+  private setRoute(
+    method: HttpMethodsUnionUppercase,
+    route: string,
+    isRuntime: boolean,
+    handler: Handler,
+    opts?: RouteOpts<any>,
+  ) {
     const encode = this.encodeRoute(method, route);
-    this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
 
-    this.#router.on(method, route, (req, _, routeParams) => {
-      this.#routes.get(encode)!.hits++;
-      this.handleRoute(req, routeParams, handler, encode, opts);
-    });
-  }
+    const handleFn = (req, _, routeParams) => {
+      this.handleRoute(req, checkParams(routeParams), handler, opts);
+    };
 
-  private registerReport() {
-    this.setRoute('GET', '/_report', (flow) => {
-      flow.setHeader('content-type', 'text/html');
-      flow.send(generateReport(this.#routes));
-    });
+    this.#routesLib.set(encode, handleFn);
+
+    if (isRuntime) {
+      this.#router.reset();
+
+      this.#routesLib.forEach((handlerFn, route) => {
+        const [m, r] = this.explodeRoute(route);
+
+        this.#router.on(m, r, handlerFn);
+      });
+    } else {
+      this.#router.on(method, route, handleFn);
+    }
   }
 
   private handleRoute(
     req: IncomingMessage,
     routeParams: { [k: string]: string | undefined },
     handle: Handler,
-    encodedRoute: string,
-    opts?: RouteOpts<any>,
+    routeOpts?: RouteOpts<any>,
   ) {
-    const flow = this.#flows.get((req as any).id)!;
+    const flow = (req as any).flow as BareRequest;
 
-    // apply possible route options
-    if (opts?.disableCache) flow.disableCache();
-    if (opts?.cache) flow.setCache(opts.cache);
-    if (opts?.timeout) flow['attachTimeout'](opts.timeout);
+    if (!flow) {
+      throw new Error(
+        `No flow been found to route this request, theres a sync mistake in the server.`,
+      ); // should NEVER happen
+    }
 
     // populate with route params
     if (routeParams) flow['setParams'](routeParams);
 
-    // attach a gneral statistic reports counter
-    if (this.bareOptions.statisticReport) {
-      flow._originalRequest.on('close', () => {
-        if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
-          this.#routes.get(encodedRoute)!.success++;
-        } else {
-          this.#routes.get(encodedRoute)!.fails++;
-        }
-      });
+    // apply possible route options
+    if (routeOpts) {
+      if (routeOpts.disableCache) flow.disableCache();
+      if (routeOpts.cache) flow.setCache(routeOpts.cache);
+      if (routeOpts.timeout) flow['attachTimeout'](routeOpts.timeout);
     }
 
+    // TODO: implement per route middlewares!
+
     try {
-      const routeReturn = handle.bind(undefined)(flow);
+      const routeReturn = handle(flow);
+      if (flow.sent) return;
+
       if (routeReturn instanceof Promise) {
         routeReturn
-          .catch((e) => this.#errorHandler(e, flow))
-          .then((result) => this.soundRouteReturn(result, flow));
-      } else {
-        this.soundRouteReturn(routeReturn, flow);
+          .then((result) => flow.send(result))
+          .catch((e) => {
+            this.#errorHandler(e, flow);
+          });
+        return;
       }
+
+      flow.send(routeReturn);
     } catch (e) {
       this.#errorHandler(e, flow);
     }
   }
 
-  private soundRouteReturn(response: any, flow: BareRequest) {
-    if (!response) flow.send();
-
-    switch (response.constructor) {
-      case Uint8Array:
-      case Uint16Array:
-      case Uint32Array:
-      case ArrayBuffer:
-      case Buffer:
-      case Number:
-        flow.send(response);
-        break;
-      case Writable:
-        flow.stream(response);
-        break;
-      case String:
-        flow.json(response);
-        break;
-      default:
-        logMe.warn('Unknown type to send');
-    }
-  }
-
   private encodeRoute(method: string, route: string) {
-    return `${method} ${route}`;
+    if (route.endsWith('/')) route = route.slice(0, -1);
+    return `${method}?${route}`;
   }
 
-  private basicErrorHandler(e: any, flow: BareRequest) {
-    flow.status(500);
-    flow.json({ ...e, message: e.message, stack: e.stack });
+  private explodeRoute(route: string) {
+    return route.split('?') as [method: HttpMethodsUnionUppercase, route: string];
+  }
+
+  private basicErrorHandler(
+    e: any,
+    flow: BareRequest,
+    status?: typeof StatusCodes[keyof typeof StatusCodes],
+  ) {
+    flow.status(status ?? 500).json({ ...e, message: e.message, stack: e.stack });
+  }
+
+  private async stopWs() {
+    if (!this.ws) return;
+
+    if (this.bareOptions.wsOptions?.closeHandler) {
+      await this.bareOptions.wsOptions.closeHandler(this.ws);
+    }
+
+    this.ws._internal.close();
   }
 
   private attachGracefulHandlers() {
@@ -305,28 +373,119 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     process.on('SIGINT', graceful);
   }
 
+  private attachRoutesDeclarator() {
+    for (const method of [...Object.keys(HttpMethods), 'declare']) {
+      this[method] = (routeSetUp: any) => {
+        checkRouteSetUp(routeSetUp, method);
+
+        if (method === 'declare') {
+          for (const m of new Set<string>(routeSetUp.methods))
+            this.setRoute(
+              HttpMethods[m],
+              routeSetUp.route,
+              false,
+              routeSetUp.handler,
+              routeSetUp.options,
+            );
+        } else {
+          this.setRoute(
+            HttpMethods[method],
+            routeSetUp.route,
+            false,
+            routeSetUp.handler,
+            routeSetUp.options,
+          );
+        }
+
+        return this;
+      };
+    }
+  }
+
   // ========= PUBLIC APIS ==========
+
+  // TODO: add working options setter
+  // setOption<B extends BareOptions<any>, O extends keyof B>(option: O, arg: B[O]) {
+  //   throw new Error('Not implemented')
+  // }
+
+  get runtimeRoute() {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return new Proxy({} as Readonly<Routes>, {
+      get(_, key) {
+        if (typeof key === 'symbol') return this;
+        if (!self.server?.listening) {
+          console.warn(
+            'Runtime route declaration can be done only while the server is running. Follow documentation for more details',
+          );
+          return this;
+        }
+
+        if ([...Object.keys(HttpMethods), 'declare'].includes(key as string)) {
+          return (routeSetUp: any) => {
+            checkRouteSetUp(routeSetUp, key);
+            if (key === 'declare') {
+              for (const m of new Set<string>(routeSetUp.methods))
+                self.setRoute(
+                  HttpMethods[m],
+                  routeSetUp.route,
+                  true,
+                  routeSetUp.handler,
+                  routeSetUp.options,
+                );
+            } else {
+              self.setRoute(
+                HttpMethods[key],
+                routeSetUp.route,
+                true,
+                routeSetUp.handler,
+                routeSetUp.options,
+              );
+            }
+            return this;
+          };
+        }
+
+        return this;
+      },
+    });
+  }
 
   start(cb?: (address: string) => void) {
     this.#writeMiddlewares();
-
-    const port = this.bareOptions?.serverPort || process.env.PORT || 3000;
-    const address = this.bareOptions?.serverAddress || '0.0.0.0';
-
-    // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
-    this.server.listen(+port, address, undefined, () =>
-      cb ? cb(`http://localhost:${port}`) : void 0,
+    this.ws?.['_start']();
+    return new Promise<void>((res) =>
+      // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
+      this.server.listen(this.#port, this.#host, undefined, () => {
+        cb ? cb(`http://0.0.0.0:${this.#port}`) : void 0;
+        res();
+      }),
     );
   }
 
-  stop(cb?: (e?: Error) => void) {
-    for (const flow of this.#flows.values()) {
-      if (!flow._originalResponse.headersSent) {
-        flow.status(500);
-        flow.send('Server terminated');
-      }
-    }
-    this.server?.close(cb);
+  async stop(cb?: (e?: Error) => void) {
+    // TODO: to solve problem announcing to clients the disconnect
+    // for (const flow of this.#flows.values()) {
+    //   if (!flow.sent) {
+    //     flow.status(500);
+    //     flow.send('Server terminated');
+    //   }
+    // }
+    if (!this.ws) await this.stopWs();
+    if (!this.server?.listening) return;
+
+    await new Promise<void>((res, rej) => {
+      this.server.close((e) => {
+        if (e) {
+          rej(e);
+          cb?.(e);
+        } else {
+          cb?.();
+          res();
+        }
+      });
+    });
   }
 
   use(middleware: Middleware) {
@@ -334,55 +493,65 @@ export class BareServer<A extends `${number}.${number}.${number}.${number}`> {
     return this;
   }
 
-  getRoutes() {
-    return [...this.#routes.keys()];
+  getMiddlewares(): Middleware[] {
+    return this.#middlewares;
   }
 
-  get route(): Readonly<{
-    [K in keyof typeof HttpMethods]: HandlerExposed;
-  }> {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    return new Proxy(
-      {},
-      {
-        get(_, key) {
-          if (typeof key === 'symbol') return self;
+  setCustomErrorHandler(eh: ErrorHandler) {
+    this.#errorHandler = eh;
+  }
 
-          if (Object.keys(HttpMethods).includes(key as string)) {
-            return function (routeSetUp: any) {
-              checkRouteSetUp(routeSetUp, key);
-              self.setRoute(
-                HttpMethods[key],
-                routeSetUp.route,
-                routeSetUp.handler,
-                routeSetUp.options,
-              );
-              return self;
-            };
-          }
+  getServerPort(): number {
+    return (this.server.address() as any).port;
+  }
 
-          return self;
-        },
-      },
-    ) as any;
+  getRoutes() {
+    return [...this.#routes.keys()];
   }
 }
 
 function checkRouteSetUp(routeSetUp: { [setting: string]: any }, key: string) {
   if (typeof routeSetUp.route !== 'string') {
-    throw new Error(`A route path for the method ${key} is not a a string`);
+    throw new TypeError(`A route path for the method ${key} is not a a string`);
   } else if (routeSetUp.route[0] !== '/') {
-    throw new Error(
+    throw new SyntaxError(
       `A route path should start with '/' for route ${routeSetUp.route} for method ${key}`,
     );
   } else if (routeSetUp.route[1] === '/') {
-    throw new Error(
+    throw new SyntaxError(
       `Declared route ${routeSetUp.route} for method ${key} is not correct, review the syntax`,
     );
   } else if (typeof routeSetUp.handler !== 'function') {
-    throw new Error(
+    throw new TypeError(
       `Handler for the route ${routeSetUp.route} for method ${key} is not a function`,
+    );
+  } else if (
+    routeSetUp.options?.timeout &&
+    typeof routeSetUp.options.timeout !== 'number' &&
+    !Number.isFinite(routeSetUp.options.timeout)
+  ) {
+    throw new TypeError(
+      `Only numeric values are valid per-route timeout, submitted ${routeSetUp.options.timeout}`,
     );
   }
 }
+
+function checkParams(params: { [param: string]: string | undefined }) {
+  if (!params || Object.keys(params).length === 0) return params;
+  for (const [param, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+
+    if (/(\.\/)(\.\.)(\\.)/.test(decodeURI(value))) {
+      logMe.warn(
+        `Param ${param} value ${value} was redacted because contained dangerous characters`,
+      );
+      param[param] = 'REDACTED';
+    }
+  }
+
+  return params;
+}
+
+const BareHttp = BareServer as ServerMergedType;
+
+export { BareHttp };

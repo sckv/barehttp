@@ -20,6 +20,12 @@ const makeLoggerMetadata = (method: string | null) => ({
   method_name: method,
 });
 
+const parseArgs = (argSlice: any) =>
+  argSlice.map((arg) => {
+    if (util.types.isNativeError(arg)) return parseError(arg, {});
+    return arg;
+  });
+
 export function serializeLog(...args) {
   const site = callsites()[2];
 
@@ -30,15 +36,16 @@ export function serializeLog(...args) {
     trace: context.current?.store.get('id'),
   };
 
-  if (!args.length) return { message: 'empty log', ...meta };
+  if (!args.length) return { message: 'EMPTY_LOG', ...meta };
   if (args.length === 1) {
     if (typeof args[0] === 'string') return { message: args[0], ...meta };
     if (util.types.isNativeError(args[0])) return parseError(args[0], meta);
-    return { ...args[0], ...meta };
+    if (args[0].message) return { message: args[0].message, ...args };
+    return { message: 'EMPTY_MESSAGE', args: args[0], ...meta };
   }
 
-  if (typeof args[0] === 'string') return { message: args.shift(), args, ...meta };
-  return { ...args, ...meta };
+  if (typeof args[0] === 'string') return { message: args.shift(), args: parseArgs(args), ...meta };
+  return { message: 'EMPTY_MESSAGE', args: parseArgs(args), ...meta };
 }
 
 function apacheLogFormat(
@@ -46,13 +53,13 @@ function apacheLogFormat(
   remoteClient: string,
   content: number,
   req: IncomingMessage,
-  res: ServerResponse,
+  statusCode: number,
 ) {
   return `${req.headers['x-forwarded-for'] || req.socket.remoteAddress} ${
     remoteClient || '-'
   } ${startDate.toISOString()} "${req.method} ${req.url} HTTP/${req.httpVersionMajor}.${
     req.httpVersionMinor
-  }" ${res.statusCode} ${content || '-'}`;
+  }" ${statusCode} ${content || '-'}`;
 }
 
 export function getStatusLevel(statusCode: number) {
@@ -76,13 +83,19 @@ export function serializeHttp(
   return {
     level: getStatusLevel(res.statusCode),
     logObject: {
-      message: apacheLogFormat(startDate, remoteClient, headers['Content-Length'], req, res),
+      message: apacheLogFormat(
+        startDate,
+        remoteClient,
+        headers['Content-Length'],
+        req,
+        res.statusCode,
+      ),
       timestamp: Date.now(),
       trace: executionId,
       request: {
         headers: req.headers,
         http_version: req.httpVersion,
-        id: req.headers['x-request-id'] || 'unknown',
+        id: req.headers['x-request-id'] || (req as any).id || 'unknown',
         method: req.method,
         url: req.url,
       },
@@ -90,7 +103,7 @@ export function serializeHttp(
         status_code: res.statusCode,
         headers: headers,
       },
-      duration: headers['X-Processing-Time'],
+      duration: headers['X-Processing-Time'] || 'unknown',
     },
   };
 }
