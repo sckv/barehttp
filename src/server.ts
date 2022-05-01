@@ -233,7 +233,7 @@ export class BareServer<A extends IP> {
       const toExecute = middleware || this.#middlewares[order];
       const response = toExecute(flow);
       if (response instanceof Promise) await response;
-    } catch (e) {
+    } catch (e: any) {
       this.#errorHandler(e, flow);
     }
   }
