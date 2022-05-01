@@ -4,7 +4,6 @@ import { ServerOptions } from 'ws';
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
 import { context, enableContext, newContext } from './context';
-import { generateReport } from './report';
 import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
 import {
   HttpMethods,
@@ -31,16 +30,23 @@ type RouteOpts<C> = {
    * Request timeout handler in `ms`
    */
   timeout?: number;
+  middlewares?: Array<Middleware>;
 };
 
 type BareOptions<A extends IP> = {
   middlewares?: Array<Middleware>;
+  /**
+   * Opt-out request body parsing (de-serialization)
+   * Default `false`
+   */
+  doNotParseBody?: boolean;
   serverPort?: number;
   /**
    * Address to bind the web server to
    * Default '0.0.0.0'
    */
   serverAddress?: A | 'localhost';
+  setRandomPort?: boolean;
   /**
    * Enable request context storage
    * Default `false`
@@ -67,11 +73,6 @@ type BareOptions<A extends IP> = {
    * Log the resolved reverse DNS first hop for remote ip of the client (first proxy)
    */
   reverseDns?: boolean;
-  /**
-   * Exposes a report with the routes usage.
-   * Default `false`
-   */
-  statisticsReport?: boolean;
   /**
    * WebSocket server exposure
    */
@@ -124,22 +125,21 @@ export class BareServer<A extends IP> {
   #port = 3000;
   #host = '0.0.0.0';
 
-  #runMiddlewaresSequence: (flow: BareRequest) => void = (_) => _;
+  #globalMiddlewaresRun: (flow: BareRequest) => void = (_) => _;
+  #routeMiddlewaresStore: Map<string, (flow: BareRequest) => void> = new Map();
 
   constructor(private bareOptions: BareOptions<A> = {}) {
     // init
     this.server = createServer(this.#listener.bind(this));
     this.attachGracefulHandlers();
     this.attachRoutesDeclarator();
-    this.mainOptionsSetter();
+    this.applyLaunchOptions();
 
     return this;
   }
 
   #listener = (request: IncomingMessage, response: ServerResponse) => {
-    const { requestTimeFormat, logging } = this.bareOptions;
-
-    const flow = new BareRequest(request, response, { logging, requestTimeFormat });
+    const flow = new BareRequest(request, response, this.bareOptions);
 
     // init and attach request uuid to the context
     if (this.bareOptions.context) {
@@ -147,8 +147,16 @@ export class BareServer<A extends IP> {
       context.current?.store.set('id', flow.ID.code);
     }
 
-    // attach a flow to the flow memory storage
-    this.applyMiddlewares(flow).catch((e) => this.#errorHandler(e, flow, 400));
+    // execute global middlewares on the request
+    this.applyMiddlewares(flow)
+      .catch((e) => {
+        this.#errorHandler(e, flow, 400);
+      })
+      .then(() => {
+        // if middlewares sent the response back, stop here
+        if (flow.sent) return;
+        this.#router.lookup(flow._originalRequest, flow._originalResponse);
+      });
   };
 
   /**
@@ -171,13 +179,18 @@ export class BareServer<A extends IP> {
 
     const text = lines.join('\n');
 
-    this.#runMiddlewaresSequence = new AsyncFunction('flow', text);
+    this.#globalMiddlewaresRun = new AsyncFunction('flow', text);
   };
 
-  private mainOptionsSetter = () => {
+  private applyLaunchOptions = () => {
     const { bareOptions: bo } = this;
 
-    this.#port = +(bo.serverPort || process.env.PORT || 3000);
+    if (bo.setRandomPort) {
+      this.#port = undefined as any;
+    } else {
+      this.#port = +(bo.serverPort || process.env.PORT || 3000);
+    }
+
     this.#host = typeof bo.serverAddress === 'string' ? bo.serverAddress : '0.0.0.0';
 
     // context setting
@@ -199,22 +212,17 @@ export class BareServer<A extends IP> {
     }
 
     this.#middlewares.push(...(bo.middlewares || []));
-    if (bo.statisticsReport) this.registerReport();
   };
 
   private async applyMiddlewares(flow: BareRequest) {
-    if (!flow) {
-      throw new Error(
-        `No flow been found to apply middlewares for, theres a sync mistake in the server.`,
-      ); // should NEVER happen
-    }
-
     if (this.bareOptions.cors) {
       this.resolveMiddleware(flow, 0, this.#corsInstance?.corsMiddleware.bind(this.#corsInstance));
     }
 
-    // invoke body stream consumption
-    await flow['readBody']();
+    if (this.bareOptions.doNotParseBody !== true) {
+      // invoke body stream consumption
+      await flow['readBody']();
+    }
 
     // attach cookies middleware
     if (this.bareOptions.cookies) {
@@ -229,12 +237,7 @@ export class BareServer<A extends IP> {
       flow['setRemoteClient'](remoteClient[0]);
     }
 
-    if (this.#middlewares.length) await this.#runMiddlewaresSequence(flow);
-
-    // now route the request if middlewares did not send the response back
-    if (!flow.sent) {
-      this.#router.lookup(flow._originalRequest, flow._originalResponse);
-    }
+    if (this.#middlewares.length) await this.#globalMiddlewaresRun(flow);
   }
 
   /**
@@ -253,22 +256,19 @@ export class BareServer<A extends IP> {
   private setRoute(
     method: HttpMethodsUnionUppercase,
     route: string,
-    runtime: boolean,
+    isRuntime: boolean,
     handler: Handler,
     opts?: RouteOpts<any>,
   ) {
     const encode = this.encodeRoute(method, route);
-    this.#routes.set(encode, { hits: 0, fails: 0, success: 0 });
 
     const handleFn = (req, _, routeParams) => {
-      this.#routes.get(encode)!.hits++;
-
-      this.handleRoute(req, checkParams(routeParams), handler, encode, opts);
+      this.handleRoute(req, checkParams(routeParams), handler, opts);
     };
 
     this.#routesLib.set(encode, handleFn);
 
-    if (runtime) {
+    if (isRuntime) {
       this.#router.reset();
 
       this.#routesLib.forEach((handlerFn, route) => {
@@ -281,19 +281,11 @@ export class BareServer<A extends IP> {
     }
   }
 
-  private registerReport() {
-    this.setRoute('GET', '/_report', false, (flow) => {
-      flow.setHeader('Content-Type', 'text/html');
-      flow.send(generateReport(this.#routes));
-    });
-  }
-
   private handleRoute(
     req: IncomingMessage,
     routeParams: { [k: string]: string | undefined },
     handle: Handler,
-    encodedRoute: string,
-    opts?: RouteOpts<any>,
+    routeOpts?: RouteOpts<any>,
   ) {
     const flow = (req as any).flow as BareRequest;
 
@@ -303,35 +295,33 @@ export class BareServer<A extends IP> {
       ); // should NEVER happen
     }
 
-    // apply possible route options
-    if (opts) {
-      if (opts.disableCache) flow.disableCache();
-      if (opts.cache) flow.setCache(opts.cache);
-      if (opts.timeout) flow['attachTimeout'](opts.timeout);
-    }
-
     // populate with route params
     if (routeParams) flow['setParams'](routeParams);
 
-    // attach a general statistic reports counter
-    if (this.bareOptions.statisticsReport) {
-      flow._originalRequest.on('close', () => {
-        if (flow.statusToSend < 300 && flow.statusToSend >= 200) {
-          this.#routes.get(encodedRoute)!.success++;
-        } else {
-          this.#routes.get(encodedRoute)!.fails++;
-        }
-      });
+    // apply possible route options
+    if (routeOpts) {
+      if (routeOpts.disableCache) flow.disableCache();
+      if (routeOpts.cache) flow.setCache(routeOpts.cache);
+      if (routeOpts.timeout) flow['attachTimeout'](routeOpts.timeout);
     }
 
+    // TODO: implement per route middlewares!
+
     try {
-      const routeReturn = handle.bind(undefined)(flow);
+      const routeReturn = handle(flow);
+      if (flow.sent) return;
+
       if (routeReturn instanceof Promise) {
-        routeReturn.then((result) => flow.send(result)).catch((e) => this.#errorHandler(e, flow));
-      } else {
-        flow.send(routeReturn);
+        routeReturn
+          .then((result) => flow.send(result))
+          .catch((e) => {
+            this.#errorHandler(e, flow);
+          });
+        return;
       }
-    } catch (e: any) {
+
+      flow.send(routeReturn);
+    } catch (e) {
       this.#errorHandler(e, flow);
     }
   }
@@ -483,8 +473,10 @@ export class BareServer<A extends IP> {
     //   }
     // }
     if (!this.ws) await this.stopWs();
+    if (!this.server?.listening) return;
+
     await new Promise<void>((res, rej) => {
-      this.server?.close((e) => {
+      this.server.close((e) => {
         if (e) {
           rej(e);
           cb?.(e);
@@ -507,6 +499,10 @@ export class BareServer<A extends IP> {
 
   setCustomErrorHandler(eh: ErrorHandler) {
     this.#errorHandler = eh;
+  }
+
+  getServerPort(): number {
+    return (this.server.address() as any).port;
   }
 
   getRoutes() {

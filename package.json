@@ -13,7 +13,7 @@
   "scripts": {
     "build": "rm -rf ./lib && tsc",
     "build:dev": "rm -rf ./dev-lib && tsc -p tsconfig.dev.json",
-    "test": "jest --runInBand --coverage",
+    "test": "jest --coverage",
     "lint": "eslint ./src --fix",
     "release": "semantic-release -e ./.releaserc.json"
   },
@@ -38,8 +38,8 @@
     "cookie-signature": "^1.1.0",
     "find-my-way": "^5.0.0",
     "hyperid": "^2.3.1",
-    "pino": "^7.5.1",
-    "pino-pretty": "^7.2.0",
+    "pino": "^7.11.0",
+    "pino-pretty": "^7.6.1",
     "ws": "^8.3.0"
   },
   "devDependencies": {
@@ -61,6 +61,7 @@
     "express": "^4.17.1",
     "fastify": "^3.24.1",
     "jest": "^27.4.3",
+    "prettier": "^2.5.1",
     "semantic-release": "^18.0.1",
     "supertest": "^6.1.3",
     "ts-jest": "^27.0.7",

@@ -63,8 +63,10 @@ export class WebSocketServer {
         } else {
           this.doUpgrade(response, request, socket, head);
         }
-      } catch (e: any) {
-        this.rejectUpgrade(request, socket, e?.message, e);
+      } catch (e) {
+        if (e instanceof Error) {
+          this.rejectUpgrade(request, socket, e?.message, e);
+        }
       }
     });
 

@@ -28,16 +28,6 @@ test('Gets an uuid upon instantiation from headers', () => {
   expect(request.ID.code).toBe('SOME_UUID');
 });
 
-test('Adds logging listener if set up', () => {
-  const { inc, out } = createRequest();
-
-  const listeners = out.listenerCount('close');
-
-  new BareRequest(inc, out, { logging: true });
-
-  expect(out.listenerCount('close')).toBe(listeners + 1);
-});
-
 test('Gets response header', () => {
   const { request } = createRequest();
 
