@@ -46,6 +46,9 @@ export const isNullType = (t: Type<ts.Type>) => t.isNull() || t.isUndefined();
 
 type ResolvedBasicTypes = 'string' | 'number' | 'boolean' | 'array' | 'object';
 
+export const isHandler = (c: Node<ts.Node>) => c.getSymbol()?.getName() === 'handler';
+export const isRoute = (c: Node<ts.Node>) => c.getSymbol()?.getName() === 'route';
+
 export const getTypeGenericText = (t: Type<ts.Type>) => {
   if (t.isStringLiteral() || t.isNumberLiteral() || t.isBooleanLiteral()) {
     return t.getBaseTypeOfLiteralType().getText() as ResolvedBasicTypes;

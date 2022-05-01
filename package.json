@@ -9,8 +9,7 @@
   },
   "files": [
     "lib",
-    "src",
-    "tsconfig.build.json"
+    "src"
   ],
   "scripts": {
     "build": "rm -rf ./lib && tsc -p tsconfig.build.json",
@@ -41,6 +40,7 @@
     "fast-json-stringify": "^3.1.0",
     "find-my-way": "^5.0.0",
     "hyperid": "^2.3.1",
+    "lodash": "^4.17.21",
     "pino": "^7.11.0",
     "pino-pretty": "^7.6.1",
     "ts-morph": "^14.0.0",
