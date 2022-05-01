@@ -51,7 +51,7 @@ import { BareHttp, logMe } from 'barehttp';
 
 const app = new BareHttp();
 
-app.get({
+ app.route.get({
   route: '/route',
   handler: function routeGet(flow) {
     flow.json({ everythings: 'OK' });
@@ -90,7 +90,7 @@ import { BareHttp, logMe } from 'barehttp';
 
 const app = new BareHttp({ logging: true });
 
-app.get({
+ app.route.get({
   route:'/route',
   handler: async function routeV1() {
     return { promised: 'data' };
@@ -206,7 +206,7 @@ To set a route for `get | post | patch | put | delete | options | head` with fol
   Example
 
 ```ts
-app.get({
+app.route.get({
   route: '/route',
   options: { timeout: 2000 },
   handler: async (flow) => {

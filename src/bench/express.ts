@@ -2,7 +2,7 @@ const express = require('express');
 const app = express();
 const port = 3000;
 
-app.get('/myroute', (req, res) => {
+app.route.get('/myroute', (req, res) => {
   res.json({ ping: 'pong' });
 });
 

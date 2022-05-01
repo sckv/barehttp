@@ -108,13 +108,15 @@ export type Routes = {
   [K in HttpMethodsUnion | 'declare']: HandlerExposed<K>;
 };
 export type BareHttpType<A extends IP = any> = BareServer<A> & Routes;
-export type ServerMergedType = {
-  new <A extends IP>(args?: BareOptions<A>): BareHttpType<A>;
-};
+// export type ServerMergedType = {
+//   new <A extends IP>(args?: BareOptions<A>): BareHttpType<A>;
+// };
 
 export class BareServer<A extends IP> {
   server: Server;
   ws?: WebSocketServer;
+
+  route: Readonly<Routes> = {} as any;
 
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
@@ -375,7 +377,7 @@ export class BareServer<A extends IP> {
 
   private attachRoutesDeclarator() {
     for (const method of [...Object.keys(HttpMethods), 'declare']) {
-      this[method] = (routeSetUp: any) => {
+      this.route[method] = (routeSetUp: any) => {
         checkRouteSetUp(routeSetUp, method);
 
         if (method === 'declare') {
@@ -552,6 +554,4 @@ function checkParams(params: { [param: string]: string | undefined }) {
   return params;
 }
 
-const BareHttp = BareServer as ServerMergedType;
-
-export { BareHttp };
+export { BareServer as BareHttp };

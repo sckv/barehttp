@@ -4,7 +4,7 @@ import { generateCustomSchema } from './custom-schema';
 import { isFinalType, logInternals } from './helpers';
 import { convertToJsonSchema } from './json-schema';
 
-const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
+const project = new Project({ tsConfigFilePath: './tsconfig.json' });
 project.enableLogging();
 
 const sourceFile = project.getSourceFile('server.ts');
@@ -28,7 +28,6 @@ export const returnGeneratedCodeSchemas = (
     .findReferences()[0]
     .getReferences()
     ?.filter((re) => {
-      console.log({ re });
       return re.compilerObject.fileName.includes(fileRouteToDeclarations);
     });
 
@@ -111,25 +110,27 @@ export const returnGeneratedCodeSchemas = (
       handler: getReturnStatements(routeCombination.handler),
     }));
 
-  const schemas = perRoute.map(({ handler, route, methodName }) => {
-    const schemas = handler.map((t) => generateCustomSchema(t));
-    let finalSchema = schemas[0];
-    if (schemas.length > 1) {
-      finalSchema = {
-        type: 'union',
-        nullable: false,
-        anyOf: schemas,
-      };
-    }
+  const schemas = perRoute
+    .filter((pr) => pr.route)
+    .map(({ handler, route, methodName }) => {
+      const schemas = handler.map((t) => generateCustomSchema(t));
+      let finalSchema = schemas[0];
+      if (schemas.length > 1) {
+        finalSchema = {
+          type: 'union',
+          nullable: false,
+          anyOf: schemas,
+        };
+      }
 
-    return {
-      route,
-      methodName,
-      schemas,
-      finalSchema,
-      jsonSchema: convertToJsonSchema(finalSchema),
-    };
-  });
+      return {
+        route,
+        methodName,
+        schemas,
+        finalSchema,
+        jsonSchema: convertToJsonSchema(finalSchema),
+      };
+    });
 
   return schemas;
 };
