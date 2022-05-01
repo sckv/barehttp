@@ -17,7 +17,7 @@ const sourceFile = project.getSourceFile('server.ts');
 const tp = sourceFile?.getClass('BareServer')?.getMember('route');
 
 const acceptedPropertyNames = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch'];
-export const returnGeneratedCodeSchemas = (fileRouteToDeclarations: string) => {
+export const generateRouteSchema = (fileRouteToDeclarations: string) => {
   if (!tp) {
     throw new Error('No project been allocated, theres some issue');
   }
@@ -118,7 +118,7 @@ export const returnGeneratedCodeSchemas = (fileRouteToDeclarations: string) => {
         finalSchema = {
           type: 'union',
           nullable: false,
-          anyOf: schemas,
+          oneOf: schemas,
         };
       }
 
@@ -188,4 +188,4 @@ const getReturnStatements = (n?: SyntaxList | Node<ts.Node>): Type<ts.Type>[] =>
 };
 
 // returnGeneratedCodeSchemas('examples', tp);
-returnGeneratedCodeSchemas('examples');
+generateRouteSchema('examples');

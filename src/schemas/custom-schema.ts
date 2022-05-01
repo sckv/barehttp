@@ -79,7 +79,7 @@ export type ObjectSchemaType = {
 
 export type UnionSchemaType = {
   type: 'union';
-  anyOf: CustomSchema[];
+  oneOf: CustomSchema[];
   nullable: boolean;
 };
 
@@ -99,7 +99,7 @@ export const generateCustomSchema = (t: Type<ts.Type>): CustomSchema => {
   if (t.isUnion()) {
     const nulled = t.getUnionTypes().some((nt) => isNullType(nt));
     const cleanTypes = helpers.cleanNullableTypes(t.getUnionTypes());
-    let returning: { nullable?: boolean; anyOf?: any[]; type?: string } = {
+    let returning: { nullable?: boolean; oneOf?: any[]; type?: string } = {
       nullable: false,
       type: 'union',
     };
@@ -111,7 +111,7 @@ export const generateCustomSchema = (t: Type<ts.Type>): CustomSchema => {
     }, [] as any);
 
     if (transformed.length > 1) {
-      returning.anyOf = transformed;
+      returning.oneOf = transformed;
     } else {
       returning = transformed[0];
     }

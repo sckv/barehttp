@@ -1,13 +1,13 @@
 import { BareHttp } from '../index';
 
-const app = new BareHttp({ logging: false });
+const app = new BareHttp({ logging: false, declaredRoutesPaths: ['examples'] });
 
 interface Ok {
   haha: number;
 }
 
 type Cool = { okey?: boolean };
-type NotCool = { notOk: boolean; optional?: string[] };
+type NotCool = { notOk: boolean; optional: string[] };
 
 type Generic<G extends boolean = boolean> = { prop: G };
 type SomeReturning = {
@@ -27,24 +27,26 @@ type SomeReturning = {
 const returning: SomeReturning = {
   fine: 'fine',
   coolData: 1123,
-  kek: { haha: 123123 },
+  kek: { haha: null },
   otherUnion: 1233232,
   generical: { prop: false },
   justArray: [],
   strangeArray: [{ okey: true }],
+  twoDifferentObjects: { notOk: 23423423 },
+  mergedObjects: { notOk: 0, optional: [3423423] },
 } as any;
 
 const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
 app.route.get({
   route: '/route',
-  options: { timeout: 2000 },
+  options: { timeout: 2000, runtimeCheck: { output: true } },
   handler: async function (flow) {
     flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
-    await wait();
-    if (flow.remoteIp) {
-      return { special: 'return' };
-    }
+    // await wait();
+    // if (flow.remoteIp) {
+    //   return { special: 'return' };
+    // }
     return returning;
   },
 });
@@ -57,23 +59,23 @@ app.route.declare({
 
 const _wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
-app.route
-  .get({
-    route: '/route',
-    options: { timeout: 2000 },
-    handler: async (flow) => {
-      flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
+// app.route
+//   .get({
+//     route: '/route',
+//     options: { timeout: 2000 },
+//     handler: async (flow) => {
+//       flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
 
-      // await wait();
-      return 'JUST GET MESSAGE';
-    },
-  })
-  .post({
-    route: '/route',
-    handler: async function routeV1() {
-      return 'JUST POST MESSAGE';
-    },
-  });
+//       // await wait();
+//       return 'JUST GET MESSAGE';
+//     },
+//   })
+//   .post({
+//     route: '/route',
+//     handler: async function routeV1() {
+//       return 'JUST POST MESSAGE';
+//     },
+//   });
 
 app
   .use(() => {

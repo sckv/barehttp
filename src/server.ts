@@ -1,4 +1,5 @@
 import Router from 'find-my-way';
+import fastJson from 'fast-json-stringify';
 import { ServerOptions } from 'ws';
 
 import { BareRequest, CacheOpts } from './request';
@@ -14,6 +15,8 @@ import {
 } from './utils';
 import { Cors, CorsOptions } from './middlewares/cors/cors';
 import { WebSocketServer } from './websocket';
+import { generateRouteSchema } from './schemas/generator';
+import { logInternals } from './schemas/helpers';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -30,6 +33,9 @@ type RouteOpts<C> = {
    * Request timeout handler in `ms`
    */
   timeout?: number;
+  runtimeCheck?: {
+    output?: boolean;
+  };
   middlewares?: Array<Middleware>;
 };
 
@@ -41,6 +47,7 @@ type BareOptions<A extends IP> = {
    */
   doNotParseBody?: boolean;
   serverPort?: number;
+  declaredRoutesPaths?: Array<string>;
   /**
    * Address to bind the web server to
    * Default '0.0.0.0'
@@ -129,6 +136,7 @@ export class BareServer<A extends IP> {
 
   #globalMiddlewaresRun: (flow: BareRequest) => void = (_) => _;
   #routeMiddlewaresStore: Map<string, (flow: BareRequest) => void> = new Map();
+  #routeRuntimeSchemas: Map<string, { raw: any; compiled: any }> = new Map();
 
   constructor(private bareOptions: BareOptions<A> = {}) {
     // init
@@ -136,6 +144,7 @@ export class BareServer<A extends IP> {
     this.attachGracefulHandlers();
     this.attachRoutesDeclarator();
     this.applyLaunchOptions();
+    this.loadRoutesSchemas();
 
     return this;
   }
@@ -315,14 +324,40 @@ export class BareServer<A extends IP> {
 
       if (routeReturn instanceof Promise) {
         routeReturn
-          .then((result) => flow.send(result))
+          .then((result) => {
+            if (!routeOpts?.runtimeCheck) {
+              flow.send(result);
+              return;
+            }
+            const schema = this.#routeRuntimeSchemas.get(`${req.method?.toLowerCase()}-${req.url}`);
+            const schemaCompiled = schema?.compiled(result);
+            logInternals({
+              schemaCompiled,
+              schemas: this.#routeRuntimeSchemas,
+              getKey: `${req.method}-${req.url}`,
+            });
+            if (schemaCompiled) flow.sendStringifiedJson(schemaCompiled);
+            else flow.send(result);
+            flow.send(result);
+          })
           .catch((e) => {
             this.#errorHandler(e, flow);
           });
         return;
       }
 
-      flow.send(routeReturn);
+      console.log('coming to sending');
+
+      if (!routeOpts?.runtimeCheck) {
+        flow.send(routeReturn);
+        return;
+      }
+
+      const schema = this.#routeRuntimeSchemas.get(`${req.method}-${req.url}`);
+      const schemaCompiled = schema?.compiled(routeReturn);
+      console.log({ schemaCompiled });
+      if (schemaCompiled) flow.sendStringifiedJson(schemaCompiled);
+      else flow.send(routeReturn);
     } catch (e) {
       this.#errorHandler(e, flow);
     }
@@ -488,6 +523,20 @@ export class BareServer<A extends IP> {
         }
       });
     });
+  }
+
+  loadRoutesSchemas() {
+    if (this.bareOptions.declaredRoutesPaths?.length) {
+      for (const path of this.bareOptions.declaredRoutesPaths) {
+        const schemas = generateRouteSchema(path);
+        for (const schema of schemas) {
+          this.#routeRuntimeSchemas.set(`${schema.methodName}-${schema.route}`, {
+            raw: schema.jsonSchema,
+            compiled: fastJson(schema.jsonSchema, { ajv: { strict: true, coerceTypes: false } }),
+          });
+        }
+      }
+    }
   }
 
   use(middleware: Middleware) {
