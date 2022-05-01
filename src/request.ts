@@ -9,7 +9,6 @@ import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/coo
 import { types } from 'util';
 import { Writable } from 'stream';
 import url from 'url';
-
 import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
 

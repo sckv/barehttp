@@ -13,7 +13,7 @@
   "scripts": {
     "build": "rm -rf ./lib && tsc",
     "build:dev": "rm -rf ./dev-lib && tsc -p tsconfig.dev.json",
-    "test": "jest --runInBand --coverage",
+    "test": "jest --coverage",
     "lint": "eslint ./src --fix",
     "release": "semantic-release -e ./.releaserc.json"
   },

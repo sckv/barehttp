@@ -46,6 +46,7 @@ type BareOptions<A extends IP> = {
    * Default '0.0.0.0'
    */
   serverAddress?: A | 'localhost';
+  setRandomPort?: boolean;
   /**
    * Enable request context storage
    * Default `false`
@@ -146,7 +147,16 @@ export class BareServer<A extends IP> {
       context.current?.store.set('id', flow.ID.code);
     }
 
-    this.#router.lookup(flow._originalRequest, flow._originalResponse);
+    // execute global middlewares on the request
+    this.applyMiddlewares(flow)
+      .catch((e) => {
+        this.#errorHandler(e, flow, 400);
+      })
+      .then(() => {
+        // if middlewares sent the response back, stop here
+        if (flow.sent) return;
+        this.#router.lookup(flow._originalRequest, flow._originalResponse);
+      });
   };
 
   /**
@@ -175,7 +185,12 @@ export class BareServer<A extends IP> {
   private applyLaunchOptions = () => {
     const { bareOptions: bo } = this;
 
-    this.#port = +(bo.serverPort || process.env.PORT || 3000);
+    if (bo.setRandomPort) {
+      this.#port = undefined as any;
+    } else {
+      this.#port = +(bo.serverPort || process.env.PORT || 3000);
+    }
+
     this.#host = typeof bo.serverAddress === 'string' ? bo.serverAddress : '0.0.0.0';
 
     // context setting
@@ -290,18 +305,18 @@ export class BareServer<A extends IP> {
       if (routeOpts.timeout) flow['attachTimeout'](routeOpts.timeout);
     }
 
-    // execute global middlewares on the request
-    this.applyMiddlewares(flow).catch((e) => this.#errorHandler(e, flow, 400));
-
-    // if middlewares sent the response back, stop here
-    if (flow.sent) return;
+    // TODO: implement per route middlewares!
 
     try {
       const routeReturn = handle(flow);
       if (flow.sent) return;
 
       if (routeReturn instanceof Promise) {
-        routeReturn.then((result) => flow.send(result)).catch((e) => this.#errorHandler(e, flow));
+        routeReturn
+          .then((result) => flow.send(result))
+          .catch((e) => {
+            this.#errorHandler(e, flow);
+          });
         return;
       }
 
@@ -458,8 +473,10 @@ export class BareServer<A extends IP> {
     //   }
     // }
     if (!this.ws) await this.stopWs();
+    if (!this.server?.listening) return;
+
     await new Promise<void>((res, rej) => {
-      this.server?.close((e) => {
+      this.server.close((e) => {
         if (e) {
           rej(e);
           cb?.(e);
@@ -482,6 +499,10 @@ export class BareServer<A extends IP> {
 
   setCustomErrorHandler(eh: ErrorHandler) {
     this.#errorHandler = eh;
+  }
+
+  getServerPort(): number {
+    return (this.server.address() as any).port;
   }
 
   getRoutes() {
