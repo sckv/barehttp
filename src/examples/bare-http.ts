@@ -49,7 +49,7 @@ app.route.get({
   },
 });
 
-app.declare({
+app.route.declare({
   route: '/multiple_declaration_route',
   handler: function multipleDeclarationRoute() {},
   methods: ['get', 'post'],
@@ -57,7 +57,7 @@ app.declare({
 
 const _wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
-app
+app.route
   .get({
     route: '/route',
     options: { timeout: 2000 },

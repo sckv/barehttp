@@ -11,7 +11,7 @@
     "lib"
   ],
   "scripts": {
-    "build": "rm -rf ./lib && tsc",
+    "build": "rm -rf ./lib && tsc -p tsconfig.build.json",
     "build:dev": "rm -rf ./dev-lib && tsc -p tsconfig.dev.json",
     "test": "jest --coverage",
     "lint": "eslint ./src --fix",
@@ -36,6 +36,7 @@
     "callsites": "^3.1.0",
     "cookie": "^0.4.1",
     "cookie-signature": "^1.1.0",
+    "fast-json-stringify": "^3.1.0",
     "find-my-way": "^5.0.0",
     "hyperid": "^2.3.1",
     "pino": "^7.11.0",
