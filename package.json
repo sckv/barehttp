@@ -10,7 +10,7 @@
   "files": [
     "lib",
     "src",
-    "tsconfig.json"
+    "tsconfig.build.json"
   ],
   "scripts": {
     "build": "rm -rf ./lib && tsc -p tsconfig.build.json",
