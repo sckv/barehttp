@@ -8,7 +8,9 @@
     "test": "__tests__"
   },
   "files": [
-    "lib"
+    "lib",
+    "src",
+    "tsconfig.json"
   ],
   "scripts": {
     "build": "rm -rf ./lib && tsc -p tsconfig.build.json",
