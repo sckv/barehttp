@@ -2,6 +2,7 @@ import { ClassMemberTypes, Node, Project, SyntaxList, ts, Type } from 'ts-morph'
 
 import { generateCustomSchema } from './custom-schema';
 import { isFinalType, logInternals } from './helpers';
+import { convertToJsonSchema } from './json-schema';
 
 const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
 project.enableLogging();
@@ -13,6 +14,7 @@ const tp = sourceFile?.getClass('BareServer')?.getMember('route');
 const isHandler = (c: Node<ts.Node>) => c.getSymbol()?.getName() === 'handler';
 const isRoute = (c: Node<ts.Node>) => c.getSymbol()?.getName() === 'route';
 
+const acceptedPropertyNames = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch'];
 export const returnGeneratedCodeSchemas = (
   fileRouteToDeclarations: string,
   base?: ClassMemberTypes,
@@ -25,7 +27,10 @@ export const returnGeneratedCodeSchemas = (
     .getChildrenOfKind(ts.SyntaxKind.Identifier)[0]
     .findReferences()[0]
     .getReferences()
-    ?.filter((re) => re.compilerObject.fileName.includes(fileRouteToDeclarations));
+    ?.filter((re) => {
+      console.log({ re });
+      return re.compilerObject.fileName.includes(fileRouteToDeclarations);
+    });
 
   if (!refsAcrossProject?.length) {
     console.log('There are no routes declarations across the project');
@@ -33,6 +38,17 @@ export const returnGeneratedCodeSchemas = (
   }
 
   const extractedReturns = refsAcrossProject.map((ref) => {
+    const methodName = ref
+      .getNode()
+      .getAncestors()
+      .map((n) => n.getSymbol()?.getName())
+      .filter((param) => acceptedPropertyNames.includes(param!))
+      .pop();
+
+    if (!methodName) {
+      return [];
+    }
+
     return ref
       .getNode()
       .getAncestors()
@@ -49,6 +65,7 @@ export const returnGeneratedCodeSchemas = (
         if (isHandler(c)) {
           return {
             type: 'handler',
+            methodName,
             syntaxList: c
               .getChildren()
               .find(
@@ -63,6 +80,7 @@ export const returnGeneratedCodeSchemas = (
 
         return {
           type: 'route',
+          methodName,
           value: c
             .getNodeProperty('initializer' as any)
             .getText()
@@ -74,6 +92,7 @@ export const returnGeneratedCodeSchemas = (
   const perRoute = extractedReturns
     .map((routeCombination) => {
       return routeCombination!.reduce((acc, curr) => {
+        acc.methodName = curr.methodName as any;
         if (curr.type === 'handler') {
           return {
             ...acc,
@@ -85,14 +104,14 @@ export const returnGeneratedCodeSchemas = (
             route: curr.value,
           } as any;
         }
-      }, {} as { handler: SyntaxList; route: string });
+      }, {} as { handler: SyntaxList; route: string; methodName: 'get' | 'post' | 'put' | 'delete' | 'options' | 'head' | 'patch' });
     })
     .map((routeCombination) => ({
       ...routeCombination,
       handler: getReturnStatements(routeCombination.handler),
     }));
 
-  const schemas = perRoute.map(({ handler, route }) => {
+  const schemas = perRoute.map(({ handler, route, methodName }) => {
     const schemas = handler.map((t) => generateCustomSchema(t));
     let finalSchema = schemas[0];
     if (schemas.length > 1) {
@@ -105,8 +124,10 @@ export const returnGeneratedCodeSchemas = (
 
     return {
       route,
+      methodName,
       schemas,
       finalSchema,
+      jsonSchema: convertToJsonSchema(finalSchema),
     };
   });
 
@@ -166,4 +187,5 @@ const getReturnStatements = (n?: SyntaxList | Node<ts.Node>): Type<ts.Type>[] =>
     .map((acc) => acc!.getType());
 };
 
+// returnGeneratedCodeSchemas('examples', tp);
 logInternals(returnGeneratedCodeSchemas('examples', tp));
