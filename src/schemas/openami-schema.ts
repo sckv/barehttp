@@ -60,7 +60,7 @@ export const convertToOpenApiSchema = (schema: CustomSchema, route?: string, met
   if (schema.type === 'union') {
     const reSchema = schema as UnionSchemaType;
     return {
-      anyOf: reSchema.anyOf.map((item) => convertToOpenApiSchema(item)),
+      oneOf: reSchema.oneOf.map((item) => convertToOpenApiSchema(item)),
     };
   }
 
