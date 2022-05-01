@@ -1,6 +1,6 @@
-import { BareHttp, logMe, context } from '../index';
+import { BareHttp } from '../index';
 
-const app = new BareHttp({ cookies: true });
+const app = new BareHttp({ logging: false });
 
 interface Ok {
   haha: number;
@@ -49,18 +49,44 @@ app.route.get({
   },
 });
 
-app.route.post({
-  route: '/route',
-  handler: async function routeV1(flow) {
-    return 'JUST MESSAGE';
-  },
+app.declare({
+  route: '/multiple_declaration_route',
+  handler: function multipleDeclarationRoute() {},
+  methods: ['get', 'post'],
 });
 
+const _wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
+
 app
-  .use((flow) => {
+  .get({
+    route: '/route',
+    options: { timeout: 2000 },
+    handler: async (flow) => {
+      flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
+
+      // await wait();
+      return 'JUST GET MESSAGE';
+    },
+  })
+  .post({
+    route: '/route',
+    handler: async function routeV1() {
+      return 'JUST POST MESSAGE';
+    },
+  });
+
+app
+  .use(() => {
+    app.runtimeRoute.get({
+      route: `/runtime_route`,
+      options: { timeout: 2000 },
+      handler: async () => {
+        return 'JUST MESSAGE 2';
+      },
+    });
     return;
   })
-  .use(async (flow) => {
+  .use(async () => {
     return;
   });
 
