@@ -423,8 +423,6 @@ Done on MacBook Pro with M1 Pro processor. No logs enabled. `NODE_ENV=production
 
 ![Fastify](./docs/fastify.png)
 
-### Express
-
 ## Support
 
 Please open an issue if you have any questions or need support
