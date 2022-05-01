@@ -409,7 +409,21 @@ Some of the features are in progress.
 
 ## Benchmarks
 
-(coming soon)
+Done on MacBook Pro with M1 Pro processor. No logs enabled. `NODE_ENV=production` is set. All settings set to default.
+
+### BareHttp
+
+![BareHttp](./docs/barehttp.png)
+
+### Express
+
+![Express](./docs/express.png)
+
+### Fastify
+
+![Fastify](./docs/fastify.png)
+
+### Express
 
 ## Support
 

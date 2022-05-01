@@ -1,6 +1,6 @@
 import { BareHttp } from '../index';
 
-const brt = new BareHttp({ logging: true });
+const brt = new BareHttp({ logging: false });
 
 brt.get({
   route: '/myroute',
