@@ -6,7 +6,7 @@ import { logMe } from './logger';
 import { JSONParse, JSONStringify } from './utils';
 
 import { IncomingMessage, Server } from 'http';
-import { Socket } from 'net';
+import { Duplex } from 'stream';
 
 const generateId = hyperid();
 
@@ -59,13 +59,13 @@ export class WebSocketServer {
         if (response instanceof Promise) {
           response
             .then((answer) => this.doUpgrade(answer, request, socket, head))
-            .catch((e) => this.rejectUpgrade(socket, e?.message, e));
+            .catch((e) => this.rejectUpgrade(request, socket, e?.message, e));
         } else {
           this.doUpgrade(response, request, socket, head);
         }
       } catch (e) {
         if (e instanceof Error) {
-          this.rejectUpgrade(socket, e?.message, e);
+          this.rejectUpgrade(request, socket, e?.message, e);
         }
       }
     });
@@ -76,10 +76,10 @@ export class WebSocketServer {
   private doUpgrade(
     answer: AuthAccess<any>,
     request: IncomingMessage,
-    socket: Socket,
+    socket: Duplex,
     head: Buffer,
   ) {
-    if (!answer.access) this.rejectUpgrade(socket, answer.message);
+    if (!answer.access) this.rejectUpgrade(request, socket, answer.message);
     else {
       this._internal.handleUpgrade(request, socket, head, (ws) => {
         const userClient = {
@@ -93,8 +93,16 @@ export class WebSocketServer {
     }
   }
 
-  private rejectUpgrade(socket: Socket, message = 'Not Authorized', data?: any) {
-    logMe.warn(message || `Upgrade rejected for the client from ${socket.remoteAddress}`, data);
+  private rejectUpgrade(
+    request: IncomingMessage,
+    socket: Duplex,
+    message = 'Not Authorized',
+    data?: any,
+  ) {
+    logMe.warn(
+      message || `Upgrade rejected for the client from ${request.socket.remoteAddress}`,
+      data,
+    );
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); // TODO: enhance to be able to personalize this
     socket.destroy();
   }

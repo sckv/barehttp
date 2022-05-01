@@ -1,6 +1,6 @@
 {
   "name": "barehttp",
-  "version": "0.0.0",
+  "version": "0.4.2",
   "description": "Lightweight and fast Node.js web server",
   "main": "lib/index.js",
   "directories": {
@@ -15,7 +15,7 @@
     "build:dev": "rm -rf ./dev-lib && tsc -p tsconfig.dev.json",
     "test": "jest --runInBand --coverage",
     "lint": "eslint ./src --fix",
-    "release": "semantic-release"
+    "release": "semantic-release -e ./.releaserc.json"
   },
   "keywords": [
     "nodejs",
@@ -33,7 +33,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "callsites": "^4.0.0",
+    "callsites": "^3.1.0",
     "cookie": "^0.4.1",
     "cookie-signature": "^1.1.0",
     "find-my-way": "^5.0.0",
@@ -43,11 +43,13 @@
     "ws": "^8.3.0"
   },
   "devDependencies": {
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^8.0.2",
     "@ts-morph/bootstrap": "^0.12.2",
     "@types/cookie": "^0.4.1",
     "@types/cookie-signature": "^1.0.3",
     "@types/jest": "^27.0.3",
-    "@types/node": "^16.11.11",
+    "@types/node": "^14.17.0",
     "@types/pino": "^7.0.5",
     "@types/ws": "^8.2.1",
     "@typescript-eslint/eslint-plugin": "^5.5.0",

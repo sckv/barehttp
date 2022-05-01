@@ -1,7 +1,7 @@
 export const JSONStringify = (data: any): string | null => {
   try {
     return JSON.stringify(data);
-  } catch (e) {
+  } catch (e: any) {
     console.log('Error stringifying, data not serializable', e);
     return null;
   }
