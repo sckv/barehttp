@@ -49,7 +49,7 @@ export const convertToJsonSchema = (schema: CustomSchema) => {
   if (schema.type === 'union') {
     const reSchema = schema as UnionSchemaType;
     return {
-      oneOf: reSchema.oneOf.map((item) => convertToJsonSchema(item)),
+      anyOf: reSchema.anyOf.map((item) => convertToJsonSchema(item)),
     };
   }
 };

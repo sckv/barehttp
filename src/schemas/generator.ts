@@ -1,4 +1,4 @@
-import { Node, Project, SyntaxList, ts, Type } from 'ts-morph';
+import { ClassMemberTypes, Node, Project, ReferenceEntry, SyntaxList, ts, Type } from 'ts-morph';
 
 import { generateCustomSchema } from './custom-schema';
 import { isFinalType, isHandler, isRoute } from './helpers';
@@ -13,29 +13,53 @@ const filePath = existsSync(nodeModulesFile) ? nodeModulesFile : './tsconfig.jso
 const project = new Project({ tsConfigFilePath: filePath });
 project.enableLogging();
 
-const sourceFile = project.getSourceFile('server.ts');
-const tp = sourceFile?.getClass('BareServer')?.getMember('route');
+const serverSourceFile = project.getSourceFile('server.ts');
+const requestSourceFile = project.getSourceFile('request.ts');
+
+const routes = serverSourceFile?.getClass('BareServer')?.getMember('route');
+const runtimeRoutes = serverSourceFile?.getClass('BareServer')?.getMember('runtimeRoute');
+const flowJson = requestSourceFile?.getClass('BareRequest')?.getMember('json');
+const flowSend = requestSourceFile?.getClass('BareRequest')?.getMember('send');
 
 const acceptedPropertyNames = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch'];
-export const generateRouteSchema = (fileRouteToDeclarations: string) => {
-  if (!tp) {
-    throw new Error('No project been allocated, theres some issue');
-  }
 
-  const refsAcrossProject = tp
-    .getChildrenOfKind(ts.SyntaxKind.Identifier)[0]
+const getReferences = (fileRoute: string, target?: ClassMemberTypes) => {
+  if (!target) return [];
+  return target
+    ?.getChildrenOfKind(ts.SyntaxKind.Identifier)[0]
     .findReferences()[0]
     .getReferences()
     ?.filter((re) => {
-      return re.compilerObject.fileName.includes(fileRouteToDeclarations);
+      return re.compilerObject.fileName.includes(fileRoute);
     });
+};
 
-  if (!refsAcrossProject?.length) {
-    console.log('There are no routes declarations across the project');
-    process.exit(0);
+const getFlowNodes = (n?: ClassMemberTypes) => {
+  if (!n) return [];
+  return n
+    .getChildrenOfKind(ts.SyntaxKind.Identifier)[0]
+    .findReferences()[0]
+    .getReferences()
+    .map((r) => r.getNode().getParent()?.getParent())
+    .filter((p) => p?.getKind() === ts.SyntaxKind.CallExpression)
+    .map((p) => p?.getNodeProperty('arguments' as any));
+};
+
+console.log({
+  ...getReferences('examples', flowJson),
+  ...getReferences('examples', flowSend),
+});
+export const generateRouteSchema = (fileRouteToDeclarations: string) => {
+  if (!routes && !runtimeRoutes) {
+    throw new Error('No project been allocated, theres some issue');
   }
 
-  const extractedReturns = refsAcrossProject.map((ref) => {
+  const allReferences: ReferenceEntry[] = [
+    ...getReferences(fileRouteToDeclarations, routes),
+    ...getReferences(fileRouteToDeclarations, runtimeRoutes),
+  ];
+
+  const extractedReturns = allReferences.map((ref) => {
     const methodName = ref
       .getNode()
       .getAncestors()
@@ -109,16 +133,24 @@ export const generateRouteSchema = (fileRouteToDeclarations: string) => {
       handler: getReturnStatements(routeCombination.handler),
     }));
 
+  const flowNodes = [...getFlowNodes(flowJson), ...getFlowNodes(flowSend)]
+    .flat()
+    .filter(Boolean)
+    .map((t) => t.getType())
+    .map(generateCustomSchema);
+
+  console.log({ flowNodes });
   const schemas = perRoute
-    .filter((pr) => pr.route)
+    .filter((pr) => pr.route && pr.handler.length)
     .map(({ handler, route, methodName }) => {
+      console.log({ handler });
       const schemas = handler.map((t) => generateCustomSchema(t));
       let finalSchema = schemas[0];
       if (schemas.length > 1) {
         finalSchema = {
           type: 'union',
           nullable: false,
-          oneOf: schemas,
+          anyOf: schemas,
         };
       }
 
@@ -131,7 +163,7 @@ export const generateRouteSchema = (fileRouteToDeclarations: string) => {
       };
     });
 
-  return schemas;
+  return [...schemas, ...flowNodes];
 };
 
 const extractReturnStatements = (accumulator: Node<ts.Node>[], n?: Node<ts.Node>) => {
@@ -151,7 +183,6 @@ const extractReturnStatements = (accumulator: Node<ts.Node>[], n?: Node<ts.Node>
 
   if (n.getChildren().length) {
     const cleanChildren = n.getChildren().filter((c) => typeof c.getKind === 'function');
-
     const findReturn = cleanChildren.find((c) => c.getKind() === ts.SyntaxKind.ReturnStatement);
     const thereIf = cleanChildren.find((c) => c.getKind() === ts.SyntaxKind.IfStatement);
     const thereWhile = cleanChildren.find((c) => c.getKind() === ts.SyntaxKind.WhileKeyword);
@@ -169,6 +200,17 @@ const extractReturnStatements = (accumulator: Node<ts.Node>[], n?: Node<ts.Node>
     extractReturnStatements(accumulator, syntaxList);
   }
 };
+
+const getTypes = (nodes: Node<ts.Node>[]) =>
+  nodes
+    .map((r) =>
+      r.getChildren().find((c) => {
+        const type = c.getType();
+        return type.isObject() || isFinalType(type);
+      }),
+    )
+    .filter((n) => n)
+    .map((acc) => acc!.getType());
 
 const getReturnStatements = (n?: SyntaxList | Node<ts.Node>): Type<ts.Type>[] => {
   if (!n) return [] as any[];
@@ -188,4 +230,4 @@ const getReturnStatements = (n?: SyntaxList | Node<ts.Node>): Type<ts.Type>[] =>
 };
 
 // returnGeneratedCodeSchemas('examples', tp);
-generateRouteSchema('examples');
+console.log(generateRouteSchema('examples'));

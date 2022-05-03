@@ -96,7 +96,7 @@ function returnFinder(route: string, base?: ClassMemberTypes) {
       finalSchema = {
         type: 'union',
         nullable: false,
-        oneOf: schemas,
+        anyOf: schemas,
       };
     }
 
