@@ -47,7 +47,8 @@ app.route.get({
     // if (flow.remoteIp) {
     //   return { special: 'return' };
     // }
-    return returning;
+    // return returning;
+    flow.send(returning);
   },
 });
 
@@ -80,7 +81,7 @@ const _wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 app
   .use(() => {
     app.runtimeRoute.get({
-      route: `/runtime_route`,
+      route: '/runtime_route',
       options: { timeout: 2000 },
       handler: async () => {
         return 'JUST MESSAGE 2';
