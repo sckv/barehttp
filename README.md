@@ -51,23 +51,23 @@ import { BareHttp, logMe } from 'barehttp';
 
 const app = new BareHttp();
 
- app.route.get({
+app.route.get({
   route: '/route',
   handler: function routeGet(flow) {
-    flow.json({ everythings: 'OK' });
+    flow.json({ everything: 'OK' });
   })
 });
 
 
 // you can chain the routes
-app
+app.route
   .post({
     route: '/route',
     handler: async function routePost(flow) {
       return 'RESPONSE POST';
     },
   })
-  .patch({
+  .route.patch({
     route: '/route',
     handler: async function routePatch(flow) {
       return 'RESPONSE PATCH';
@@ -195,7 +195,7 @@ The order of the middlewares is followed by code declarations order.
 
 ---
 
-## `BareServer.get | post | patch | put | delete | options | head | declare` (Function)
+## `BareServer.route.get | post | patch | put | delete | options | head | declare` (Function)
 
 To set a route for `get | post | patch | put | delete | options | head` with following parameters:
 
@@ -214,7 +214,7 @@ app.route.get({
   },
 });
 
-app.declare({
+app.route.declare({
   route: '/declared_route',
   handler: () => {
     return 'My declared route response';
@@ -399,13 +399,26 @@ Some of the features are in progress.
 - [x] Request execution cancellation by timeout
 - [x] Bulk/chaining routes declaration
 - [x] Runtime routes hot swapping
+- [x] runtime validation schema generation per route response types (on project compile/on launch)
 - [ ] middlewares per route
 - [ ] swagger OpenAPI 3.0 on `/docs` endpoint
 - [ ] swagger OpenAPI 3.0 scheme on `/docs_raw` endpoint
 - [ ] optional export of generated schema to a location (yaml, json)
 - [ ] streaming/receiving of chunked multipart
-- [ ] runtime validation schema generation per route response types (on project compile/on launch)
 - [ ] runtime route params or query validation upon declared types (on project compile/on launch)
+
+## Runtime schema validation on response (EXPERIMENTAL)
+
+This feature enables a runtime check for the returned value for a route,
+for now it only works for `return` statements of the routes declared in handlers.
+
+Please write your `return` statements with plain response objects within the `handler` or `controller` function.
+
+To enable this feature you need to set up the following:
+
+- On `BareHttp` settings set: `enableSchemaValidation: true`
+- On `BareHttp` settings set: `declaredRoutesPaths: [...array of paths to routes]`,
+- On `route.<method>` declaration set: `options: { builtInRuntime: { output: true } }`
 
 ## Benchmarks
 
