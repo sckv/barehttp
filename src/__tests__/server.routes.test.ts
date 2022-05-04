@@ -4,7 +4,7 @@ import { BareHttp } from '../server';
 
 // test('Registers a route with a handler', () => {
 //   const app = new BareHttp({ setRandomPort: true });
-//   app.get({
+//    app.route.get({
 //     route: '/route',
 //     handler: () => {},
 //   });
@@ -15,7 +15,7 @@ import { BareHttp } from '../server';
 
 // test('Registers a route with options', () => {
 //   const app = new BareHttp({ setRandomPort: true });
-//   app.post({
+//   app.route.post({
 //     route: '/route_settings',
 //     handler: () => {},
 //     options: { disableCache: true, timeout: 2000 },
@@ -26,7 +26,7 @@ import { BareHttp } from '../server';
 
 test('Fails if theres an error throw inside route handler', async () => {
   const app = new BareHttp({ setRandomPort: true });
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {
       throw new Error();
@@ -42,7 +42,7 @@ test('Fails if theres an error throw inside route handler', async () => {
 test('Returns from the route with `return` keyword', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test2',
     handler: () => {
       return 'ALL_OK';
@@ -60,7 +60,7 @@ test("Server doesn't start if timeout is not correct", async () => {
   const app = new BareHttp({ setRandomPort: true });
 
   expect(() =>
-    app.post({
+    app.route.post({
       route: '/test',
       options: { timeout: 'some timeout' as any },
       handler: async () => {
@@ -73,7 +73,7 @@ test("Server doesn't start if timeout is not correct", async () => {
 test('Declares a runtime route', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test3',
     handler: () => {
       app.runtimeRoute.get({ route: '/runtime', handler: () => 'RUNTIME' });

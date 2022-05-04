@@ -267,8 +267,6 @@ export class BareRequest {
       return;
     }
 
-    this.sent = true;
-
     // work basic headers
     if (typeof chunk !== 'undefined' && chunk !== null)
       this.setHeader('Content-Length', Buffer.byteLength(chunk, 'utf-8'));
@@ -285,6 +283,8 @@ export class BareRequest {
     this._originalResponse.writeHead(this.statusToSend, '', this.headers);
     this._originalResponse.end(chunk || statusTuples[this.statusToSend]);
 
+    this.sent = true;
+
     // call logging section
     if (this.logging === true) {
       logHttp(
@@ -295,6 +295,11 @@ export class BareRequest {
         this._originalResponse,
       );
     }
+  }
+
+  sendStringifiedJson(data: string) {
+    this.setHeader('Content-Type', 'application/json');
+    this._send(data);
   }
 
   send(anything?: any) {
@@ -319,6 +324,7 @@ export class BareRequest {
         this.stream(anything);
         break;
       case Object:
+      case Array:
         this.json(anything);
         break;
       default:

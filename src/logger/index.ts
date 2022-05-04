@@ -12,7 +12,7 @@ const pinoCommonOptions = {
     level: (label: string) => ({ level: label }),
   },
   messageKey: 'message',
-  prettyPrint: !envs.isProd,
+  transport: envs.isProd ? undefined : { target: 'pino-pretty', options: { colorize: true } },
 };
 
 const logger = pino(pinoCommonOptions, asyncDest[0]);
