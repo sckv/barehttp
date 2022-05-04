@@ -2,7 +2,7 @@ import { BareHttp } from '../index';
 
 const app = new BareHttp({
   logging: false,
-  enableSchemaValidation: true,
+  enableSchemaValidation: false,
   declaredRoutesPaths: ['examples/bare-http'],
 });
 
