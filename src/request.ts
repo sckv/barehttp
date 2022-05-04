@@ -324,6 +324,7 @@ export class BareRequest {
         this.stream(anything);
         break;
       case Object:
+      case Array:
         this.json(anything);
         break;
       default:

@@ -1,6 +1,7 @@
 import Router from 'find-my-way';
 import fastJson from 'fast-json-stringify';
 import { ServerOptions } from 'ws';
+import Ajv, { ValidateFunction } from 'ajv';
 
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
@@ -33,19 +34,33 @@ type RouteOpts<C> = {
    * Request timeout handler in `ms`
    */
   timeout?: number;
-  runtimeCheck?: {
+  builtInRuntime?: {
     output?: boolean;
   };
   middlewares?: Array<Middleware>;
 };
 
 type BareOptions<A extends IP> = {
+  /**
+   * Declare a global middlewares array
+   * Default: []
+   */
   middlewares?: Array<Middleware>;
   /**
    * Opt-out request body parsing (de-serialization)
    * Default `false`
    */
   doNotParseBody?: boolean;
+  /**
+   * Opt-in to have a custom swagger per route generation
+   * Default `false`
+   */
+  enableBuiltInSwagger?: boolean;
+  /**
+   * Opt-in to have a custom runtime JSON Schema checker per routes
+   * Default `false`
+   */
+  enableBuiltInRuntimeTypes?: boolean;
   serverPort?: number;
   declaredRoutesPaths?: Array<string>;
   /**
@@ -115,13 +130,11 @@ export type Routes = {
   [K in HttpMethodsUnion | 'declare']: HandlerExposed<K>;
 };
 export type BareHttpType<A extends IP = any> = BareServer<A> & Routes;
-// export type ServerMergedType = {
-//   new <A extends IP>(args?: BareOptions<A>): BareHttpType<A>;
-// };
 
 export class BareServer<A extends IP> {
   server: Server;
   ws?: WebSocketServer;
+  ajv?: Ajv;
 
   route: Readonly<Routes> = {} as any;
 
@@ -136,7 +149,7 @@ export class BareServer<A extends IP> {
 
   #globalMiddlewaresRun: (flow: BareRequest) => void = (_) => _;
   #routeMiddlewaresStore: Map<string, (flow: BareRequest) => void> = new Map();
-  #routeRuntimeSchemas: Map<string, { raw: any; compiled: any }> = new Map();
+  #routeRuntimeSchemas: Map<string, { raw: any; compiled: ValidateFunction }> = new Map();
 
   constructor(private bareOptions: BareOptions<A> = {}) {
     // init
@@ -324,43 +337,50 @@ export class BareServer<A extends IP> {
 
       if (routeReturn instanceof Promise) {
         routeReturn
-          .then((result) => {
-            if (!routeOpts?.runtimeCheck) {
-              flow.send(result);
-              return;
-            }
-            const schema = this.#routeRuntimeSchemas.get(`${req.method?.toLowerCase()}-${req.url}`);
-            const schemaCompiled = schema?.compiled(result);
-            logInternals({
-              schemaCompiled,
-              schemas: this.#routeRuntimeSchemas,
-              getKey: `${req.method}-${req.url}`,
-            });
-            if (schemaCompiled) flow.sendStringifiedJson(schemaCompiled);
-            else flow.send(result);
-            flow.send(result);
-          })
+          .then((result) =>
+            this.resolveResponse(
+              flow,
+              result,
+              req.url,
+              req.method?.toLowerCase(),
+              routeOpts?.builtInRuntime?.output,
+            ),
+          )
           .catch((e) => {
             this.#errorHandler(e, flow);
           });
         return;
       }
 
-      console.log('coming to sending');
-
-      if (!routeOpts?.runtimeCheck) {
-        flow.send(routeReturn);
-        return;
-      }
-
-      const schema = this.#routeRuntimeSchemas.get(`${req.method}-${req.url}`);
-      const schemaCompiled = schema?.compiled(routeReturn);
-      console.log({ schemaCompiled });
-      if (schemaCompiled) flow.sendStringifiedJson(schemaCompiled);
-      else flow.send(routeReturn);
+      this.resolveResponse(
+        flow,
+        routeReturn,
+        req.url,
+        req.method?.toLowerCase(),
+        routeOpts?.builtInRuntime?.output,
+      );
     } catch (e) {
       this.#errorHandler(e, flow);
     }
+  }
+
+  private resolveResponse(
+    flow: BareRequest,
+    response: any,
+    url?: string,
+    method?: string,
+    builtInRuntime?: boolean,
+  ) {
+    if (!builtInRuntime || !method || !url) {
+      flow.send(response);
+      return;
+    }
+    const schema = this.#routeRuntimeSchemas.get(`${method}-${url}`);
+    const check = schema?.compiled(response);
+    console.log({ errors: schema?.compiled.errors, type: typeof schema?.compiled.errors });
+
+    if ((schema && check) || !schema) flow.send(response);
+    else flow.status(500).send(schema?.compiled.errors);
   }
 
   private encodeRoute(method: string, route: string) {
@@ -382,11 +402,9 @@ export class BareServer<A extends IP> {
 
   private async stopWs() {
     if (!this.ws) return;
-
     if (this.bareOptions.wsOptions?.closeHandler) {
       await this.bareOptions.wsOptions.closeHandler(this.ws);
     }
-
     this.ws._internal.close();
   }
 
@@ -526,13 +544,18 @@ export class BareServer<A extends IP> {
   }
 
   loadRoutesSchemas() {
+    if (!this.bareOptions.enableBuiltInSwagger && !this.bareOptions.enableBuiltInRuntimeTypes) {
+      return;
+    }
+
     if (this.bareOptions.declaredRoutesPaths?.length) {
+      this.ajv = new Ajv({ strict: true });
       for (const path of this.bareOptions.declaredRoutesPaths) {
         const schemas = generateRouteSchema(path);
         for (const schema of schemas) {
           this.#routeRuntimeSchemas.set(`${schema.methodName}-${schema.route}`, {
             raw: schema.jsonSchema,
-            compiled: fastJson(schema.jsonSchema, { ajv: { strict: true, coerceTypes: false } }),
+            compiled: this.ajv.compile(schema.jsonSchema),
           });
         }
       }

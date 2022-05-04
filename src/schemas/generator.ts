@@ -8,18 +8,21 @@ import path from 'path';
 import { existsSync } from 'fs';
 
 const nodeModulesFile = path.join(process.cwd(), 'node_modules', 'barehttp', 'tsconfig.build.json');
-const filePath = existsSync(nodeModulesFile) ? nodeModulesFile : './tsconfig.json'; // for test purposes
+const isInstalledPackage = existsSync(nodeModulesFile);
+// const filePath = isInstalledPackage ? nodeModulesFile : './tsconfig.json'; // for test purposes
 
-const project = new Project({ tsConfigFilePath: filePath });
+const project = new Project({ tsConfigFilePath: path.join(process.cwd(), '/tsconfig.json') });
+
 project.enableLogging();
+if (isInstalledPackage) project.addSourceFilesFromTsConfig(nodeModulesFile);
 
 const serverSourceFile = project.getSourceFile('server.ts');
-const requestSourceFile = project.getSourceFile('request.ts');
+// const requestSourceFile = project.getSourceFile('request.ts');
 
 const routes = serverSourceFile?.getClass('BareServer')?.getMember('route');
 const runtimeRoutes = serverSourceFile?.getClass('BareServer')?.getMember('runtimeRoute');
-const flowJson = requestSourceFile?.getClass('BareRequest')?.getMember('json');
-const flowSend = requestSourceFile?.getClass('BareRequest')?.getMember('send');
+// const flowJson = requestSourceFile?.getClass('BareRequest')?.getMember('json');
+// const flowSend = requestSourceFile?.getClass('BareRequest')?.getMember('send');
 
 const acceptedPropertyNames = ['get', 'post', 'put', 'delete', 'options', 'head', 'patch'];
 
@@ -45,10 +48,6 @@ const getFlowNodes = (n?: ClassMemberTypes) => {
     .map((p) => p?.getNodeProperty('arguments' as any));
 };
 
-console.log({
-  ...getReferences('examples', flowJson),
-  ...getReferences('examples', flowSend),
-});
 export const generateRouteSchema = (fileRouteToDeclarations: string) => {
   if (!routes && !runtimeRoutes) {
     throw new Error('No project been allocated, theres some issue');
@@ -133,17 +132,9 @@ export const generateRouteSchema = (fileRouteToDeclarations: string) => {
       handler: getReturnStatements(routeCombination.handler),
     }));
 
-  const flowNodes = [...getFlowNodes(flowJson), ...getFlowNodes(flowSend)]
-    .flat()
-    .filter(Boolean)
-    .map((t) => t.getType())
-    .map(generateCustomSchema);
-
-  console.log({ flowNodes });
   const schemas = perRoute
     .filter((pr) => pr.route && pr.handler.length)
     .map(({ handler, route, methodName }) => {
-      console.log({ handler });
       const schemas = handler.map((t) => generateCustomSchema(t));
       let finalSchema = schemas[0];
       if (schemas.length > 1) {
@@ -163,7 +154,7 @@ export const generateRouteSchema = (fileRouteToDeclarations: string) => {
       };
     });
 
-  return [...schemas, ...flowNodes];
+  return [...schemas];
 };
 
 const extractReturnStatements = (accumulator: Node<ts.Node>[], n?: Node<ts.Node>) => {
@@ -209,7 +200,7 @@ const getTypes = (nodes: Node<ts.Node>[]) =>
         return type.isObject() || isFinalType(type);
       }),
     )
-    .filter((n) => n)
+    .filter((n) => n && typeof n.getType === 'function')
     .map((acc) => acc!.getType());
 
 const getReturnStatements = (n?: SyntaxList | Node<ts.Node>): Type<ts.Type>[] => {
@@ -218,16 +209,5 @@ const getReturnStatements = (n?: SyntaxList | Node<ts.Node>): Type<ts.Type>[] =>
   const accumulator = [] as Node<ts.Node>[];
   extractReturnStatements(accumulator, n);
 
-  return accumulator
-    .map((r) =>
-      r.getChildren().find((c) => {
-        const type = c.getType();
-        return type.isObject() || isFinalType(type);
-      }),
-    )
-    .filter((n) => n)
-    .map((acc) => acc!.getType());
+  return getTypes(accumulator);
 };
-
-// returnGeneratedCodeSchemas('examples', tp);
-console.log(generateRouteSchema('examples'));
