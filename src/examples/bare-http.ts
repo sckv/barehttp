@@ -1,6 +1,10 @@
 import { BareHttp } from '../index';
 
-const app = new BareHttp({ logging: false });
+const app = new BareHttp({
+  logging: false,
+  enableBuiltInRuntimeTypes: true,
+  declaredRoutesPaths: ['examples/bare-http'],
+});
 
 interface Ok {
   haha: number;
@@ -27,7 +31,7 @@ type SomeReturning = {
 const returning: SomeReturning = {
   fine: 'fine',
   coolData: 1123,
-  kek: { haha: null },
+  kek: 34323,
   otherUnion: 1233232,
   generical: { prop: false },
   justArray: [],
@@ -40,15 +44,15 @@ const wait = () => new Promise((resolve) => setTimeout(resolve, 5000));
 
 app.route.get({
   route: '/route',
-  options: { timeout: 2000 },
+  options: { timeout: 2000, builtInRuntime: { output: true } },
   handler: async function (flow) {
     flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
     // await wait();
     // if (flow.remoteIp) {
     //   return { special: 'return' };
     // }
-    // return returning;
-    flow.send(returning);
+    return returning;
+    // flow.send(returning);
   },
 });
 
