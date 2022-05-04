@@ -2,7 +2,7 @@ import { BareHttp } from '../index';
 
 const brt = new BareHttp({ logging: false });
 
-brt.get({
+brt.route.get({
   route: '/myroute',
   handler: (flow) => {
     flow.json({ ping: 'pong' });

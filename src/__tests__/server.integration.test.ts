@@ -6,7 +6,7 @@ import { BareHttp } from '../server';
 test('Enables context in the settings', async () => {
   const app = new BareHttp({ context: true, setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => !!context.current && context.current.store instanceof Map,
   });
@@ -22,7 +22,7 @@ test('Automatically parses query parameters in the route call', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
   const spyQuery = jest.fn();
-  app.get({
+  app.route.get({
     route: '/test',
     handler: (flow) => spyQuery(flow.query),
   });
@@ -38,7 +38,7 @@ test('Enables cookies decoding in the settings', async () => {
   const app = new BareHttp({ cookies: true, setRandomPort: true });
 
   const spyCookies = jest.fn();
-  app.get({
+  app.route.get({
     route: '/test',
     handler: (flow) => spyCookies(flow.getCookies()),
   });
@@ -55,7 +55,7 @@ test('Enables cookies decoding in the settings', async () => {
 test('Enables cookies attachment in the settings', async () => {
   const app = new BareHttp({ cookies: true, setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: (flow) =>
       flow.cm?.setCookie('important', 'cookie', {
@@ -77,7 +77,7 @@ test('Enables cookies attachment in the settings', async () => {
 test('Sets x-processing-time to milliseconds', async () => {
   const app = new BareHttp({ requestTimeFormat: 'ms', setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {},
   });
@@ -92,7 +92,7 @@ test('Sets x-processing-time to milliseconds', async () => {
 test('Base x-processing-time is in seconds', async () => {
   const app = new BareHttp({ requestTimeFormat: 's', setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {},
   });
@@ -107,7 +107,7 @@ test('Base x-processing-time is in seconds', async () => {
 test('Check that app started at the indicated port', async () => {
   const app = new BareHttp({ serverPort: 9999 });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {},
   });
@@ -123,7 +123,7 @@ test('Check that app started at the indicated port', async () => {
 test('Server correctly classifies Buffer', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {
       return Buffer.from('text_data');
@@ -140,7 +140,7 @@ test('Server correctly classifies Buffer', async () => {
 test('Server correctly classifies JSON response', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {
       return { json: 'data', in: ['here'] };
@@ -157,7 +157,7 @@ test('Server correctly classifies JSON response', async () => {
 test('Server correctly classifies Number response', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => {
       return 123456;
@@ -174,7 +174,7 @@ test('Server correctly classifies Number response', async () => {
 test('Server correctly classifies incoming text/plain', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.post({
+  app.route.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody).toBe('text_data');
@@ -194,7 +194,7 @@ test('Server correctly classifies incoming text/plain', async () => {
 test('Server correctly classifies incoming application/json', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.post({
+  app.route.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody).toEqual({ json: 'json_data' });
@@ -215,7 +215,7 @@ test('Server correctly classifies incoming application/json', async () => {
 test('Server correctly classifies incoming application/x-www-form-urlencoded', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.post({
+  app.route.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody).toEqual({ urlencoded: 'data', with: 'multiple_fields' });
@@ -236,7 +236,7 @@ test('Server correctly classifies incoming application/x-www-form-urlencoded', a
 test('Server correctly classifies incoming any type', async () => {
   const app = new BareHttp({ setRandomPort: true });
 
-  app.post({
+  app.route.post({
     route: '/test',
     handler: (flow) => {
       expect(flow.requestBody.toString()).toEqual('this_is_buffered_text');
@@ -260,7 +260,7 @@ test('Server correctly aborts on long call with a per-route timeout set', async 
   const app = new BareHttp({ setRandomPort: true });
 
   const wait = () => new Promise((res) => setTimeout(res, 2000));
-  app.post({
+  app.route.post({
     route: '/test',
     options: { timeout: 200 },
     handler: async () => {
@@ -282,7 +282,7 @@ test('Server correctly aborts on long call with a per-route timeout set', async 
 
 test('Check basic cors middleware is working with default options', async () => {
   const app = new BareHttp({ cors: true, setRandomPort: true });
-  app.get({
+  app.route.get({
     route: '/test',
     handler: () => 'return data',
   });

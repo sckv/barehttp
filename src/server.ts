@@ -1,5 +1,6 @@
 import Router from 'find-my-way';
 import { ServerOptions } from 'ws';
+import Ajv, { ValidateFunction } from 'ajv';
 
 import { BareRequest, CacheOpts } from './request';
 import { logMe } from './logger';
@@ -14,6 +15,7 @@ import {
 } from './utils';
 import { Cors, CorsOptions } from './middlewares/cors/cors';
 import { WebSocketServer } from './websocket';
+import { generateRouteSchema } from './schemas/generator';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -30,17 +32,35 @@ type RouteOpts<C> = {
    * Request timeout handler in `ms`
    */
   timeout?: number;
+  builtInRuntime?: {
+    output?: boolean;
+  };
   middlewares?: Array<Middleware>;
 };
 
 type BareOptions<A extends IP> = {
+  /**
+   * Declare a global middlewares array
+   * Default: []
+   */
   middlewares?: Array<Middleware>;
   /**
    * Opt-out request body parsing (de-serialization)
    * Default `false`
    */
   doNotParseBody?: boolean;
+  /**
+   * Opt-in to have a custom swagger per route generation
+   * Default `false`
+   */
+  // enableBuiltInSwagger?: boolean;
+  /**
+   * Opt-in to have a custom runtime JSON Schema checker per routes
+   * Default `false`
+   */
+  enableSchemaValidation?: boolean;
   serverPort?: number;
+  declaredRoutesPaths?: Array<string>;
   /**
    * Address to bind the web server to
    * Default '0.0.0.0'
@@ -108,13 +128,13 @@ export type Routes = {
   [K in HttpMethodsUnion | 'declare']: HandlerExposed<K>;
 };
 export type BareHttpType<A extends IP = any> = BareServer<A> & Routes;
-export type ServerMergedType = {
-  new <A extends IP>(args?: BareOptions<A>): BareHttpType<A>;
-};
 
 export class BareServer<A extends IP> {
   server: Server;
   ws?: WebSocketServer;
+  ajv?: Ajv;
+
+  route: Readonly<Routes> = {} as any;
 
   #middlewares: Array<Middleware> = [];
   #routes: Map<string, RouteReport> = new Map();
@@ -127,6 +147,7 @@ export class BareServer<A extends IP> {
 
   #globalMiddlewaresRun: (flow: BareRequest) => void = (_) => _;
   #routeMiddlewaresStore: Map<string, (flow: BareRequest) => void> = new Map();
+  #routeRuntimeSchemas: Map<string, { raw: any; compiled: ValidateFunction }> = new Map();
 
   constructor(private bareOptions: BareOptions<A> = {}) {
     // init
@@ -134,6 +155,7 @@ export class BareServer<A extends IP> {
     this.attachGracefulHandlers();
     this.attachRoutesDeclarator();
     this.applyLaunchOptions();
+    this.loadRoutesSchemas();
 
     return this;
   }
@@ -313,16 +335,58 @@ export class BareServer<A extends IP> {
 
       if (routeReturn instanceof Promise) {
         routeReturn
-          .then((result) => flow.send(result))
+          .then((result) =>
+            this.resolveResponse(
+              flow,
+              result,
+              req.url,
+              req.method?.toLowerCase(),
+              routeOpts?.builtInRuntime?.output,
+            ),
+          )
           .catch((e) => {
             this.#errorHandler(e, flow);
           });
         return;
       }
 
-      flow.send(routeReturn);
+      this.resolveResponse(
+        flow,
+        routeReturn,
+        req.url,
+        req.method?.toLowerCase(),
+        routeOpts?.builtInRuntime?.output,
+      );
     } catch (e) {
       this.#errorHandler(e, flow);
+    }
+  }
+
+  private resolveResponse(
+    flow: BareRequest,
+    response: any,
+    url?: string,
+    method?: string,
+    builtInRuntime?: boolean,
+  ) {
+    if (!builtInRuntime || !method || !url) {
+      flow.send(response);
+      return;
+    }
+    const schema = this.#routeRuntimeSchemas.get(`${method}-${url}`);
+    const check = schema?.compiled(response);
+
+    if ((schema && check) || !schema) flow.send(response);
+    else {
+      logMe.error('Response schema error!', {
+        method,
+        url,
+        errors: schema?.compiled.errors,
+        received: response,
+      });
+      flow
+        .status(500)
+        .send({ message: `Response schema error, please communicate to server administrator.` });
     }
   }
 
@@ -345,11 +409,9 @@ export class BareServer<A extends IP> {
 
   private async stopWs() {
     if (!this.ws) return;
-
     if (this.bareOptions.wsOptions?.closeHandler) {
       await this.bareOptions.wsOptions.closeHandler(this.ws);
     }
-
     this.ws._internal.close();
   }
 
@@ -375,7 +437,7 @@ export class BareServer<A extends IP> {
 
   private attachRoutesDeclarator() {
     for (const method of [...Object.keys(HttpMethods), 'declare']) {
-      this[method] = (routeSetUp: any) => {
+      this.route[method] = (routeSetUp: any) => {
         checkRouteSetUp(routeSetUp, method);
 
         if (method === 'declare') {
@@ -488,6 +550,25 @@ export class BareServer<A extends IP> {
     });
   }
 
+  loadRoutesSchemas() {
+    if (!this.bareOptions.enableSchemaValidation) {
+      return;
+    }
+
+    if (this.bareOptions.declaredRoutesPaths?.length) {
+      this.ajv = new Ajv({ strict: true });
+      for (const path of this.bareOptions.declaredRoutesPaths) {
+        const schemas = generateRouteSchema(path);
+        for (const schema of schemas) {
+          this.#routeRuntimeSchemas.set(`${schema.methodName}-${schema.route}`, {
+            raw: schema.jsonSchema,
+            compiled: this.ajv.compile(schema.jsonSchema),
+          });
+        }
+      }
+    }
+  }
+
   use(middleware: Middleware) {
     this.#middlewares.push(middleware);
     return this;
@@ -552,6 +633,4 @@ function checkParams(params: { [param: string]: string | undefined }) {
   return params;
 }
 
-const BareHttp = BareServer as ServerMergedType;
-
-export { BareHttp };
+export { BareServer as BareHttp };

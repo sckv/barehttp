@@ -11,7 +11,7 @@
     "lib"
   ],
   "scripts": {
-    "build": "rm -rf ./lib && tsc",
+    "build": "rm -rf ./lib && tsc -p tsconfig.build.json",
     "build:dev": "rm -rf ./dev-lib && tsc -p tsconfig.dev.json",
     "test": "jest --coverage",
     "lint": "eslint ./src --fix",
@@ -33,14 +33,17 @@
   },
   "license": "MIT",
   "dependencies": {
+    "ajv": "^8.11.0",
     "callsites": "^3.1.0",
-    "cookie": "^0.4.1",
-    "cookie-signature": "^1.1.0",
-    "find-my-way": "^5.0.0",
+    "cookie": "^0.5.0",
+    "cookie-signature": "^1.2.0",
+    "find-my-way": "^5.6.0",
     "hyperid": "^2.3.1",
+    "lodash": "^4.17.21",
     "pino": "^7.11.0",
     "pino-pretty": "^7.6.1",
-    "ws": "^8.3.0"
+    "ts-morph": "^14.0.0",
+    "ws": "^8.6.0"
   },
   "devDependencies": {
     "@semantic-release/git": "^10.0.1",
@@ -66,7 +69,7 @@
     "supertest": "^6.1.3",
     "ts-jest": "^27.0.7",
     "ts-node-dev": "^1.1.6",
-    "typescript": "^4.5.2"
+    "typescript": "^4.6.4"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.3",
