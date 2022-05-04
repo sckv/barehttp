@@ -1,5 +1,4 @@
 import Router from 'find-my-way';
-import fastJson from 'fast-json-stringify';
 import { ServerOptions } from 'ws';
 import Ajv, { ValidateFunction } from 'ajv';
 
@@ -17,7 +16,6 @@ import {
 import { Cors, CorsOptions } from './middlewares/cors/cors';
 import { WebSocketServer } from './websocket';
 import { generateRouteSchema } from './schemas/generator';
-import { logInternals } from './schemas/helpers';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
@@ -55,12 +53,12 @@ type BareOptions<A extends IP> = {
    * Opt-in to have a custom swagger per route generation
    * Default `false`
    */
-  enableBuiltInSwagger?: boolean;
+  // enableBuiltInSwagger?: boolean;
   /**
    * Opt-in to have a custom runtime JSON Schema checker per routes
    * Default `false`
    */
-  enableBuiltInRuntimeTypes?: boolean;
+  enableSchemaValidation?: boolean;
   serverPort?: number;
   declaredRoutesPaths?: Array<string>;
   /**
@@ -377,10 +375,19 @@ export class BareServer<A extends IP> {
     }
     const schema = this.#routeRuntimeSchemas.get(`${method}-${url}`);
     const check = schema?.compiled(response);
-    console.log({ errors: schema?.compiled.errors, type: typeof schema?.compiled.errors });
 
     if ((schema && check) || !schema) flow.send(response);
-    else flow.status(500).send(schema?.compiled.errors);
+    else {
+      logMe.error('Response schema error!', {
+        method,
+        url,
+        errors: schema?.compiled.errors,
+        received: response,
+      });
+      flow
+        .status(500)
+        .send({ message: `Response schema error, please communicate to server administrator.` });
+    }
   }
 
   private encodeRoute(method: string, route: string) {
@@ -544,7 +551,7 @@ export class BareServer<A extends IP> {
   }
 
   loadRoutesSchemas() {
-    if (!this.bareOptions.enableBuiltInSwagger && !this.bareOptions.enableBuiltInRuntimeTypes) {
+    if (!this.bareOptions.enableSchemaValidation) {
       return;
     }
 

@@ -7,20 +7,18 @@ import { convertToJsonSchema } from './json-schema';
 import path from 'path';
 import { existsSync } from 'fs';
 
-const nodeModulesFile = path.join(process.cwd(), 'node_modules', 'barehttp', 'tsconfig.build.json');
-const isInstalledPackage = existsSync(nodeModulesFile);
-// const filePath = isInstalledPackage ? nodeModulesFile : './tsconfig.json'; // for test purposes
-
 const project = new Project({ tsConfigFilePath: path.join(process.cwd(), '/tsconfig.json') });
 
-project.enableLogging();
-if (isInstalledPackage) project.addSourceFilesFromTsConfig(nodeModulesFile);
+const nodeModulesFile = path.join(process.cwd(), 'node_modules', 'barehttp');
+const isInstalledPackage = existsSync(nodeModulesFile);
+if (isInstalledPackage) project.addSourceFileAtPath(nodeModulesFile + '/lib/server.d.ts');
 
-const serverSourceFile = project.getSourceFile('server.ts');
-// const requestSourceFile = project.getSourceFile('request.ts');
+const serverSourceFile = project.getSourceFile('server.d.ts');
 
 const routes = serverSourceFile?.getClass('BareServer')?.getMember('route');
 const runtimeRoutes = serverSourceFile?.getClass('BareServer')?.getMember('runtimeRoute');
+
+// const requestSourceFile = project.getSourceFile('request.ts');
 // const flowJson = requestSourceFile?.getClass('BareRequest')?.getMember('json');
 // const flowSend = requestSourceFile?.getClass('BareRequest')?.getMember('send');
 
@@ -37,16 +35,17 @@ const getReferences = (fileRoute: string, target?: ClassMemberTypes) => {
     });
 };
 
-const getFlowNodes = (n?: ClassMemberTypes) => {
-  if (!n) return [];
-  return n
-    .getChildrenOfKind(ts.SyntaxKind.Identifier)[0]
-    .findReferences()[0]
-    .getReferences()
-    .map((r) => r.getNode().getParent()?.getParent())
-    .filter((p) => p?.getKind() === ts.SyntaxKind.CallExpression)
-    .map((p) => p?.getNodeProperty('arguments' as any));
-};
+// needed for future (extract call functions)
+// const getFlowNodes = (n?: ClassMemberTypes) => {
+//   if (!n) return [];
+//   return n
+//     .getChildrenOfKind(ts.SyntaxKind.Identifier)[0]
+//     .findReferences()[0]
+//     .getReferences()
+//     .map((r) => r.getNode().getParent()?.getParent())
+//     .filter((p) => p?.getKind() === ts.SyntaxKind.CallExpression)
+//     .map((p) => p?.getNodeProperty('arguments' as any));
+// };
 
 export const generateRouteSchema = (fileRouteToDeclarations: string) => {
   if (!routes && !runtimeRoutes) {
