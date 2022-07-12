@@ -43,7 +43,7 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
 
 export class BareRequest<P = { [k: string]: string | undefined }> {
   ID: { code: string };
-  params: P = {} as P;
+  params: Readonly<P> = {} as P;
   query: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;

@@ -99,12 +99,12 @@ type StringArrayToObject<S> = S extends [infer F, ...infer U]
   ? F extends keyof any
     ? { [K in F]: string } & StringArrayToObject<U>
     : any
-  : {};
+  : unknown;
 
 type RemoveFirst<S extends string[]> = S extends [infer F, ...infer X]
   ? X extends string[]
     ? StringArrayToObject<X>
-    : 'ok'
+    : F
   : never;
 
 // === utility types ===
