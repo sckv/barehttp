@@ -21,7 +21,7 @@ import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
 
 type Middleware = (flow: BareRequest) => Promise<void> | void;
-type Handler = (flow: BareRequest) => any;
+type Handler<H extends { [key: string]: string | undefined }> = (flow: BareRequest<H>) => any;
 type ErrorHandler = (err: any, flow: BareRequest, status?: StatusCodesUnion) => void;
 
 type IP = `${number}.${number}.${number}.${number}`;
@@ -106,19 +106,25 @@ type BareOptions<A extends IP> = {
   cors?: boolean | CorsOptions;
 };
 
+type ExtractRouteParams<T extends string> = T extends `${infer Start}:${infer Param}/${infer Rest}`
+  ? { [K in Param | keyof ExtractRouteParams<Rest>]: string }
+  : T extends `${infer Start}:${infer Param}`
+  ? { [K in Param]: string }
+  : { [k: string]: string };
+
 interface HandlerExposed<K> {
   <R extends `/${string}`, C>(
     setUp: K extends 'declare'
       ? {
           route: R;
           options?: RouteOpts<C>;
-          handler: Handler;
+          handler: Handler<ExtractRouteParams<R>>;
           methods: Array<HttpMethodsUnion>;
         }
       : {
           route: R;
           options?: RouteOpts<C>;
-          handler: Handler;
+          handler: Handler<ExtractRouteParams<R>>;
         },
   ): BareServer<any> & Routes;
 }
@@ -279,7 +285,7 @@ export class BareServer<A extends IP> {
     method: HttpMethodsUnionUppercase,
     route: string,
     isRuntime: boolean,
-    handler: Handler,
+    handler: Handler<any>,
     opts?: RouteOpts<any>,
   ) {
     const encode = this.encodeRoute(method, route);
@@ -306,7 +312,7 @@ export class BareServer<A extends IP> {
   private handleRoute(
     req: IncomingMessage,
     routeParams: { [k: string]: string | undefined },
-    handle: Handler,
+    handle: Handler<any>,
     routeOpts?: RouteOpts<any>,
   ) {
     const flow = (req as any).flow as BareRequest;
@@ -402,7 +408,7 @@ export class BareServer<A extends IP> {
   private basicErrorHandler(
     e: any,
     flow: BareRequest,
-    status?: typeof StatusCodes[keyof typeof StatusCodes],
+    status?: (typeof StatusCodes)[keyof typeof StatusCodes],
   ) {
     flow.status(status ?? 500).json({ ...e, message: e.message, stack: e.stack });
   }
