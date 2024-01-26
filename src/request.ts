@@ -13,7 +13,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 const generateId = hyperid();
 
 type Codes<K extends keyof typeof StatusCodes = keyof typeof StatusCodes> = {
-  [L in typeof StatusCodes[K]]: typeof StatusPhrases[K];
+  [L in (typeof StatusCodes)[K]]: (typeof StatusPhrases)[K];
 };
 
 type Cacheability = 'public' | 'private' | 'no-cache' | 'no-store';
@@ -41,9 +41,11 @@ const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) =>
   return acc;
 }, {} as Codes);
 
-export class BareRequest {
+export class BareRequest<
+  H extends { [key: string]: string | undefined } = { [key: string]: string | undefined },
+> {
   ID: { code: string };
-  params: { [k: string]: string | undefined } = {};
+  params: H;
   query: { [k: string]: string | undefined } = {};
   remoteIp?: string;
   requestBody?: any;
@@ -68,6 +70,7 @@ export class BareRequest {
     public _originalResponse: ServerResponse,
     options?: { logging?: boolean; requestTimeFormat?: 'ms' | 's' },
   ) {
+    this.params = {} as H;
     this.ID = { code: (_originalRequest.headers['x-request-id'] as string) || generateId() };
     this.remoteIp = _originalRequest.socket.remoteAddress;
     this.contentType = this._originalRequest.headers['content-type'] as any;
@@ -176,7 +179,7 @@ export class BareRequest {
   }
 
   private setParams(params: { [k: string]: string | undefined }) {
-    this.params = params;
+    this.params = params as H;
   }
 
   // ======== PUBLIC APIS ========
