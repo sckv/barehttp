@@ -56,9 +56,26 @@ app.route.get({
   },
 });
 
+app.route.get({
+  route: '/route/:param/with/:id',
+  options: { timeout: 2000, builtInRuntime: { output: true } },
+  handler: (flow) => {
+    flow.params.id;
+    flow.cm?.setCookie('MY KOOKIE', 'value', { domain: 'localhost' });
+    // await wait();
+    // if (flow.remoteIp) {
+    //   return { special: 'return' };
+    // }
+    return returning;
+    // flow.send(returning);
+  },
+});
+
 app.route.declare({
-  route: '/multiple_declaration_route',
-  handler: function multipleDeclarationRoute() {},
+  route: '/route/:param/with/:id',
+  handler: function multipleDeclarationRoute(flow) {
+    flow.params.param;
+  },
   methods: ['get', 'post'],
 });
 
