@@ -1,21 +1,24 @@
-import cookie from 'cookie';
+import { serialize, type ParseOptions, type SerializeOptions } from 'cookie';
 
 import { secretsOperator } from './signer';
 
 import { logMe } from '../../logger';
-
 import type { BareRequest } from '../../request';
 
-export type CookiesManagerOptions = cookie.CookieSerializeOptions & {
+export type CookiesManagerOptions = Omit<SerializeOptions, 'expires'> & {
+  expires?: Date | number;
   signed?: boolean;
-  parseOptions?: cookie.CookieParseOptions;
+  parseOptions?: ParseOptions;
   secret?: string | string[];
 };
 
 export class CookiesManager {
   signer: null | ReturnType<typeof secretsOperator>;
 
-  constructor(private options: CookiesManagerOptions = {}, private flow: BareRequest) {
+  constructor(
+    private options: CookiesManagerOptions = {},
+    private flow: BareRequest,
+  ) {
     const secret = this.options.secret || '';
     const enableRotation = Array.isArray(secret);
     this.signer = typeof secret === 'string' || enableRotation ? secretsOperator(secret) : null;
@@ -29,15 +32,19 @@ export class CookiesManager {
   ) {
     const localSigner = signer || this.signer;
     const opts = options || this.options;
-    if (opts.expires && Number.isInteger(opts.expires)) {
-      opts.expires = new Date(opts.expires);
-    }
+    const { signed, ...rest } = opts;
+    const normalizedExpires =
+      typeof rest.expires === 'number' ? new Date(rest.expires) : rest.expires;
+    const serializeOptions: SerializeOptions = {
+      ...rest,
+      expires: normalizedExpires,
+    };
 
-    if (opts.signed && localSigner) {
+    if (signed && localSigner) {
       value = localSigner.sign(value);
     }
 
-    const serialized = cookie.serialize(name, value, opts);
+    const serialized = serialize(name, value, serializeOptions);
     let setCookie = this.flow.getHeader('Set-Cookie');
 
     if (!setCookie) {

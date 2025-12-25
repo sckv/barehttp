@@ -69,9 +69,10 @@ test('Enables cookies attachment in the settings', async () => {
   const { headers } = await axios.get(`http://localhost:${app.getServerPort()}/test`);
   await app.stop();
 
-  expect(headers['set-cookie'][0]).toContain(
-    'important=cookie; Domain=example.com; Path=/; Expires=',
-  );
+  const setCookie = headers['set-cookie'];
+  const firstCookie = Array.isArray(setCookie) ? setCookie[0] : setCookie;
+
+  expect(firstCookie).toContain('important=cookie; Domain=example.com; Path=/; Expires=');
 });
 
 test('Sets x-processing-time to milliseconds', async () => {
