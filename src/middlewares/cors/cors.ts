@@ -1,9 +1,9 @@
 'use strict';
 
-import { IncomingMessage } from 'http';
-
 import type { HttpMethodsUnionUppercase } from '../../utils';
 import type { BareRequest } from '../../request';
+
+import type { IncomingMessage } from 'http';
 
 export type CorsOptions = {
   origin?: string | RegExp;

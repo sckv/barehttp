@@ -76,7 +76,7 @@ app.route.declare({
   handler: function multipleDeclarationRoute(flow) {
     flow.params.param;
   },
-  methods: ['get', 'post'],
+  methods: ['post'],
 });
 
 const _wait = () => new Promise((resolve) => setTimeout(resolve, 5000));

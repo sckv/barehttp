@@ -1,4 +1,4 @@
-import Client, { MessageEvent, OPEN, Server as WServer, ServerOptions } from 'ws';
+import WebSocket, { WebSocketServer as WServer, type MessageEvent, type ServerOptions } from 'ws';
 import callsites from 'callsites';
 import hyperid from 'hyperid';
 
@@ -19,7 +19,7 @@ export type WsMessageHandler<D = any, UC extends UserClient = UserClient, M = an
   _event: MessageEvent,
 ) => Promise<M> | M;
 
-type ClientWS<UC extends UserClient = UserClient> = Client & { userClient: UC };
+type ClientWS<UC extends UserClient = UserClient> = WebSocket & { userClient: UC };
 
 export class WebSocketServer {
   _internal!: WServer;
@@ -29,7 +29,10 @@ export class WebSocketServer {
 
   private customUpgradeDone = false;
 
-  constructor(server: Server, private opts: ServerOptions = {}) {
+  constructor(
+    server: Server,
+    private opts: ServerOptions = {},
+  ) {
     this.#httpServer = server;
   }
 
@@ -168,7 +171,11 @@ export class WebSocketServer {
   }
 
   private send(ctx: { ws: ClientWS; client: any }, data: string | null) {
-    if (ctx.ws.readyState === OPEN) {
+    if (data === null) {
+      logMe.error('Could not serialize data for the client', { client: ctx.client });
+      return;
+    }
+    if (ctx.ws.readyState === WebSocket.OPEN) {
       ctx.ws.send(data);
     } else {
       logMe.error('Could not send data for the client', { client: ctx.client });

@@ -2,7 +2,6 @@ import { ClassMemberTypes, Node, Project, SyntaxList, ts, Type } from 'ts-morph'
 
 import { generateCustomSchema } from './custom-schema';
 import { isFinalType, logInternals } from './helpers';
-import { convertToJsonSchema } from './json-schema';
 
 const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
 project.enableLogging();
