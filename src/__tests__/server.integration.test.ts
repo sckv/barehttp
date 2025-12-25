@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-import { context } from '../context';
-import { BareHttp } from '../server';
+import { context } from '../context/index.js';
+import { BareHttp } from '../server.js';
 
 test('Enables context in the settings', async () => {
   const app = new BareHttp({ context: true, setRandomPort: true });

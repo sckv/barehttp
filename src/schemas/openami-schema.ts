@@ -1,4 +1,4 @@
-import { ArraySchemaType, CustomSchema, ObjectSchemaType, UnionSchemaType } from './custom-schema';
+import { ArraySchemaType, CustomSchema, ObjectSchemaType, UnionSchemaType } from './custom-schema.js';
 
 const createRouteSchema = (route: string, method: string, openApiSchema: any) => ({
   [route]: {
@@ -43,12 +43,15 @@ export const convertToOpenApiSchema = (schema: CustomSchema, route?: string, met
       return acc;
     }, {} as any);
 
-    const required = Object.entries(reSchema.properties).reduce((acc, [key, value]) => {
+    const required = (Object.entries(reSchema.properties) as Array<[string, CustomSchema]>).reduce(
+      (acc, [key, value]) => {
       if (!value.nullable) {
         acc.push(key);
       }
       return acc;
-    }, [] as string[]);
+    },
+      [] as string[],
+    );
 
     return {
       required,

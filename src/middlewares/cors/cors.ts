@@ -1,7 +1,7 @@
 'use strict';
 
-import type { HttpMethodsUnionUppercase } from '../../utils';
-import type { BareRequest } from '../../request';
+import type { HttpMethodsUnionUppercase } from '../../utils/index.js';
+import type { BareRequest } from '../../request.js';
 
 import type { IncomingMessage } from 'http';
 

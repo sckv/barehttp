@@ -1,9 +1,9 @@
 import { serialize, type ParseOptions, type SerializeOptions } from 'cookie';
 
-import { secretsOperator } from './signer';
+import { secretsOperator } from './signer.js';
 
-import { logMe } from '../../logger';
-import type { BareRequest } from '../../request';
+import { logMe } from '../../logger/index.js';
+import type { BareRequest } from '../../request.js';
 
 export type CookiesManagerOptions = Omit<SerializeOptions, 'expires'> & {
   expires?: Date | number;

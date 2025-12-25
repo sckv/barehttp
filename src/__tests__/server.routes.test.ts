@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { BareHttp } from '../server';
+import { BareHttp } from '../server.js';
 
 // test('Registers a route with a handler', () => {
 //   const app = new BareHttp({ setRandomPort: true });

@@ -1,10 +1,10 @@
 import hyperid from 'hyperid';
 
-import { StatusCodes, StatusCodesUnion, StatusPhrases } from './utils/';
-import { JSONParse, JSONStringify } from './utils/safe-json';
-import { logHttp, logMe } from './logger';
-import { ContentType } from './utils/content-type';
-import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
+import { StatusCodes, StatusCodesUnion, StatusPhrases } from './utils/index.js';
+import { JSONParse, JSONStringify } from './utils/safe-json.js';
+import { logHttp, logMe } from './logger/index.js';
+import { ContentType } from './utils/content-type.js';
+import { CookiesManager, CookiesManagerOptions } from './middlewares/cookies/cookie-manager.js';
 
 import { types } from 'util';
 import { Writable } from 'stream';
@@ -36,7 +36,9 @@ export type CacheOpts = {
   revalidation?: Revalidation;
 };
 
-const statusTuples = Object.entries(StatusCodes).reduce((acc, [name, status]) => {
+const statusTuples = (Object.entries(StatusCodes) as Array<
+  [keyof typeof StatusCodes, StatusCodesUnion]
+>).reduce((acc, [name, status]) => {
   acc[status] = StatusPhrases[name];
   return acc;
 }, {} as Codes);

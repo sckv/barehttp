@@ -1,4 +1,4 @@
-import { BareRequest } from '../request';
+import { BareRequest } from '../request.js';
 
 import { IncomingMessage, ServerResponse } from 'http';
 import { Socket } from 'net';

@@ -1,8 +1,8 @@
 import { ClassMemberTypes, Node, Project, ReferenceEntry, SyntaxList, ts, Type } from 'ts-morph';
 
-import { generateCustomSchema } from './custom-schema';
-import { isFinalType, isHandler, isRoute } from './helpers';
-import { convertToJsonSchema } from './json-schema';
+import { generateCustomSchema } from './custom-schema.js';
+import { isFinalType, isHandler, isRoute } from './helpers.js';
+import { convertToJsonSchema } from './json-schema.js';
 
 import path from 'path';
 import { existsSync } from 'fs';

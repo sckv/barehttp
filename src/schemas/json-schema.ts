@@ -1,4 +1,4 @@
-import { ArraySchemaType, CustomSchema, ObjectSchemaType, UnionSchemaType } from './custom-schema';
+import { ArraySchemaType, CustomSchema, ObjectSchemaType, UnionSchemaType } from './custom-schema.js';
 
 export const convertToJsonSchema = (schema: CustomSchema) => {
   if (schema.type === 'string') {
@@ -32,12 +32,15 @@ export const convertToJsonSchema = (schema: CustomSchema) => {
       return acc;
     }, {} as any);
 
-    const required = Object.entries(reSchema.properties).reduce((acc, [key, value]) => {
+    const required = (Object.entries(reSchema.properties) as Array<[string, CustomSchema]>).reduce(
+      (acc, [key, value]) => {
       if (!value.nullable) {
         acc.push(key);
       }
       return acc;
-    }, [] as string[]);
+    },
+      [] as string[],
+    );
 
     return {
       required,

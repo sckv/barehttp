@@ -6,6 +6,7 @@ module.exports = {
   },
   moduleNameMapper: {
     '^callsites$': '<rootDir>/src/__tests__/__mocks__/callsites.cjs',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   collectCoverageFrom: ['<rootDir>/src/**/*.ts'],
   coveragePathIgnorePatterns: ['<rootDir>/src/examples'],

@@ -1,4 +1,4 @@
-import { Execution } from './execution';
+import { Execution } from './execution.js';
 
 import asyncHooks from 'async_hooks';
 
