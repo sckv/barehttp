@@ -106,11 +106,11 @@ type BareOptions<A extends IP> = {
   cors?: boolean | CorsOptions;
 };
 
-type ExtractRouteParams<T extends string> = T extends `${infer Start}:${infer Param}/${infer Rest}`
+type ExtractRouteParams<T extends string> = T extends `${string}:${infer Param}/${infer Rest}`
   ? { [K in Param | keyof ExtractRouteParams<Rest>]: string }
-  : T extends `${infer Start}:${infer Param}`
-  ? { [K in Param]: string }
-  : { [k: string]: string };
+  : T extends `${string}:${infer Param}`
+    ? { [K in Param]: string }
+    : { [k: string]: string };
 
 interface HandlerExposed<K> {
   <R extends `/${string}`, C>(
@@ -437,8 +437,8 @@ export class BareServer<A extends IP> {
       console.error(err);
     });
 
-    process.on('SIGTERM', graceful);
-    process.on('SIGINT', graceful);
+    process.on('SIGTERM', () => graceful(0));
+    process.on('SIGINT', () => graceful(0));
   }
 
   private attachRoutesDeclarator() {
@@ -526,7 +526,7 @@ export class BareServer<A extends IP> {
     return new Promise<void>((res) =>
       // https://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback
       this.server.listen(this.#port, this.#host, undefined, () => {
-        cb ? cb(`http://0.0.0.0:${this.#port}`) : void 0;
+        cb?.(`http://0.0.0.0:${this.#port}`);
         res();
       }),
     );
