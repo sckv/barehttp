@@ -1,7 +1,7 @@
 import { ClassMemberTypes, Node, Project, SyntaxList, ts, Type } from 'ts-morph';
 
-import { generateCustomSchema } from './custom-schema';
-import { isFinalType, logInternals } from './helpers';
+import { generateCustomSchema } from './custom-schema.js';
+import { isFinalType, logInternals } from './helpers.js';
 
 const project = new Project({ tsConfigFilePath: 'tsconfig.json' });
 project.enableLogging();

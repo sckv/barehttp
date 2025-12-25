@@ -1,21 +1,21 @@
 import Router from 'find-my-way';
 import { ServerOptions } from 'ws';
-import Ajv, { ValidateFunction } from 'ajv';
+import { Ajv, ValidateFunction } from 'ajv';
 
-import { BareRequest, CacheOpts } from './request';
-import { logMe } from './logger';
-import { context, enableContext, newContext } from './context';
-import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager';
+import { BareRequest, CacheOpts } from './request.js';
+import { logMe } from './logger/index.js';
+import { context, enableContext, newContext } from './context/index.js';
+import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager.js';
 import {
   HttpMethods,
   HttpMethodsUnion,
   HttpMethodsUnionUppercase,
   StatusCodes,
   StatusCodesUnion,
-} from './utils';
-import { Cors, CorsOptions } from './middlewares/cors/cors';
-import { WebSocketServer } from './websocket';
-import { generateRouteSchema } from './schemas/generator';
+} from './utils/index.js';
+import { Cors, CorsOptions } from './middlewares/cors/cors.js';
+import { WebSocketServer } from './websocket.js';
+import { generateRouteSchema } from './schemas/generator.js';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';

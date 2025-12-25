@@ -1,4 +1,4 @@
-import { BareHttp } from '../index';
+import { BareHttp } from '../index.js';
 
 const brt = new BareHttp({ logging: false });
 

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { BareHttp } from '../server';
+import { BareHttp } from '../server.js';
 
 jest.spyOn(console, 'log');
 

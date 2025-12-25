@@ -1,4 +1,4 @@
-import find from 'lodash/find';
+import find from 'lodash/find.js';
 import { ts, Type } from 'ts-morph';
 
 import {
@@ -7,7 +7,7 @@ import {
   helpers,
   isFinalType,
   isNullType,
-} from './helpers';
+} from './helpers.js';
 // (type: X, is: K): type is T
 
 // export const customTypeIs = <

@@ -1,6 +1,6 @@
 import callsites from 'callsites';
 
-import { context } from '../context';
+import { context } from '../context/index.js';
 
 import util from 'util';
 import type { IncomingMessage, ServerResponse } from 'http';

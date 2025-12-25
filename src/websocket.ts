@@ -2,8 +2,8 @@ import WebSocket, { WebSocketServer as WServer, type MessageEvent, type ServerOp
 import callsites from 'callsites';
 import hyperid from 'hyperid';
 
-import { logMe } from './logger';
-import { JSONParse, JSONStringify } from './utils';
+import { logMe } from './logger/index.js';
+import { JSONParse, JSONStringify } from './utils/index.js';
 
 import { IncomingMessage, Server } from 'http';
 import { Duplex } from 'stream';

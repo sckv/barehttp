@@ -1,8 +1,8 @@
 import pino, { destination } from 'pino';
 
-import { serializeLog, serializeHttp } from './serializers';
+import { serializeLog, serializeHttp } from './serializers.js';
 
-import { envs } from '../env';
+import { envs } from '../env.js';
 
 const asyncDest = envs.isProd ? [destination({ sync: false })] : [];
 

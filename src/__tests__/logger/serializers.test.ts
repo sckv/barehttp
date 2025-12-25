@@ -1,4 +1,4 @@
-import { getStatusLevel, parseError, serializeHttp, serializeLog } from '../../logger/serializers';
+import { getStatusLevel, parseError, serializeHttp, serializeLog } from '../../logger/serializers.js';
 
 describe('logger - loglevel', () => {
   test('Correctly gets http log level from the returning http status <300', () => {

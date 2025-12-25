@@ -1,4 +1,4 @@
-import { BareHttp } from '../server';
+import { BareHttp } from '../server.js';
 
 test('Starts and shut downs the server with ws', async () => {
   const app = new BareHttp({ setRandomPort: true });
