@@ -1,7 +1,16 @@
-import { BareHttp } from '../index.js';
+import { BareHttp, logMe } from '../index.js';
 
 const app = new BareHttp({
-  logging: false,
+  logging: true,
+  requestTimeFormat: 'ms',
+  logger: {
+    console: true,
+    pretty: true,
+    sourceMaps: true,
+    level: 'trace',
+    app: { file: './logs/example-app.log', level: 'trace' },
+    http: { file: './logs/example-http.log', level: 'trace' },
+  },
   enableSchemaValidation: false,
   declaredRoutesPaths: ['examples/bare-http'],
 });
@@ -51,6 +60,7 @@ app.route.get({
     // if (flow.remoteIp) {
     //   return { special: 'return' };
     // }
+    logMe.info('Handling /route GET request');
     return returning;
     // flow.send(returning);
   },
@@ -105,6 +115,7 @@ app
       route: '/runtime_route',
       options: { timeout: 2000 },
       handler: async () => {
+        logMe.info('Handling /runtime_route GET request');
         return 'JUST MESSAGE 2';
       },
     });
