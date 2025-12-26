@@ -1,7 +1,9 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./dev-lib"
+    "outDir": "./dev-lib",
+    "sourceMap": true,
+    "inlineSources": true
   },
   "exclude": ["**/__tests__/**"]
 }

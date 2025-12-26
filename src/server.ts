@@ -3,7 +3,8 @@ import { ServerOptions } from 'ws';
 import { Ajv, ValidateFunction } from 'ajv';
 
 import { BareRequest, CacheOpts } from './request.js';
-import { logMe } from './logger/index.js';
+import { configureLogger, logMe } from './logger/index.js';
+import type { LoggerConfig } from './logger/index.js';
 import { context, enableContext, newContext } from './context/index.js';
 import { CookiesManagerOptions } from './middlewares/cookies/cookie-manager.js';
 import {
@@ -77,6 +78,10 @@ type BareOptions<A extends IP> = {
    * Default `false`
    */
   logging?: boolean;
+  /**
+   * Logger configuration. Controls outputs for app and http logs.
+   */
+  logger?: LoggerConfig;
   errorHandlerMiddleware?: ErrorHandler;
   /**
    * Request time format in `seconds` or `milliseconds`
@@ -212,6 +217,8 @@ export class BareServer<A extends IP> {
 
   private applyLaunchOptions = () => {
     const { bareOptions: bo } = this;
+
+    if (bo.logger) configureLogger(bo.logger);
 
     if (bo.setRandomPort) {
       this.#port = undefined as any;

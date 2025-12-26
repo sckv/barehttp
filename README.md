@@ -16,7 +16,7 @@ Full-featured slim webserver for microservices with extremely low overhead and r
 ## Requirements
 
 ```bash
-Node.js >= 14.8
+Node.js >= 22
 ```
 
 ## Quick start
@@ -146,6 +146,23 @@ Enables request context storage accessible through all application importing `im
 Default `false`
 
 Enable request/response logging, format varies from `production` or `development` environments, though to change use e.g. `NODE_ENV=production`
+
+#### `logger?` (Object)
+
+Configure log outputs for app logs and http request logs.
+
+```typescript
+const app = new BareHttp({
+  logging: true,
+  logger: {
+    app: { file: './logs/app.log' },
+    http: { file: './logs/http.log' },
+    level: 'debug',
+  },
+});
+```
+
+`app.file` and `http.file` accept a path string or `{ path, sync }`, and `http.file` is used only when `logging: true`. `console` (default `true`) keeps stdout logging, and `pretty` (default `true` outside production) controls colored console output. `level` sets the base level and can be overridden per target with `app.level` or `http.level`. Use `sourceMaps: true` to map log locations back to `.ts` files (requires source maps in your build).
 
 #### `ws?` (Boolean)
 
