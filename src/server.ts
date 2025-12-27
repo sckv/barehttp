@@ -20,6 +20,7 @@ import { generateRouteSchema } from './schemas/generator.js';
 
 import dns from 'dns';
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
+import { createServer as createServerHTTPS, ServerOptions as ServerHTTPSOptions } from 'https';
 
 type Middleware = (flow: BareRequest) => Promise<void> | void;
 type Handler<H extends { [key: string]: string | undefined }> = (flow: BareRequest<H>) => any;
@@ -109,6 +110,10 @@ type BareOptions<A extends IP> = {
    * Enable Cors
    */
   cors?: boolean | CorsOptions;
+  /**
+   * Custom HTTPS options for the server
+   */
+  httpsOptions?: ServerHTTPSOptions;
 };
 
 type ExtractRouteParams<T extends string> = T extends `${string}:${infer Param}/${infer Rest}`
@@ -162,7 +167,11 @@ export class BareServer<A extends IP> {
 
   constructor(private bareOptions: BareOptions<A> = {}) {
     // init
-    this.server = createServer(this.#listener.bind(this));
+    if (bareOptions.httpsOptions) {
+      this.server = createServerHTTPS(bareOptions.httpsOptions, this.#onRequest);
+    } else {
+      this.server = createServer(this.#onRequest);
+    }
     this.attachGracefulHandlers();
     this.attachRoutesDeclarator();
     this.applyLaunchOptions();
@@ -192,6 +201,7 @@ export class BareServer<A extends IP> {
       });
   };
 
+  #onRequest = this.#listener.bind(this);
   /**
    * This function generates previously defined middlewares for the sequential execution
    */
